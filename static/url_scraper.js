@@ -34,14 +34,6 @@ const copyAllBtn = document.getElementById('copyAllBtn');
 const exportCsvBtn = document.getElementById('exportCsvBtn');
 const leadsTableBody = document.getElementById('leadsTableBody');
 
-// Preset URLs
-document.querySelectorAll('.preset-url').forEach(btn => {
-  btn.addEventListener('click', () => {
-    urlInput.value = btn.getAttribute('data-url') || '';
-    urlScrapeForm.dispatchEvent(new Event('submit'));
-  });
-});
-
 dismissErrorBtn.addEventListener('click', () => {
   errorState.style.display = 'none';
 });

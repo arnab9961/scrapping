@@ -315,40 +315,6 @@ body {
   to { transform: rotate(360deg); }
 }
 
-/* Presets */
-.presets {
-  margin-top: 16px;
-  padding-top: 16px;
-  border-top: 1px solid var(--border-color);
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  flex-wrap: wrap;
-}
-
-.presets-label {
-  font-size: 12px;
-  color: var(--text-muted);
-  font-weight: 600;
-}
-
-.preset-tag, .preset-url {
-  background: #f1f5f9;
-  border: 1px solid var(--border-color);
-  border-radius: var(--radius-sm);
-  padding: 4px 10px;
-  font-size: 12px;
-  color: var(--text-secondary);
-  cursor: pointer;
-  transition: all 0.15s ease;
-}
-
-.preset-tag:hover, .preset-url:hover {
-  background: var(--primary-light);
-  color: var(--primary-hover);
-  border-color: var(--primary-border);
-}
-
 /* Loading Card */
 .loading-card {
   text-align: center;

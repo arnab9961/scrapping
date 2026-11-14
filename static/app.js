@@ -36,16 +36,6 @@ const copyAllBtn = document.getElementById('copyAllBtn');
 const exportCsvBtn = document.getElementById('exportCsvBtn');
 const leadsTableBody = document.getElementById('leadsTableBody');
 
-// Preset buttons
-document.querySelectorAll('.preset-tag').forEach(tag => {
-  tag.addEventListener('click', () => {
-    categoryInput.value = tag.getAttribute('data-cat') || '';
-    cityInput.value = tag.getAttribute('data-city') || '';
-    if (areaInput) areaInput.value = tag.getAttribute('data-area') || '';
-    searchForm.dispatchEvent(new Event('submit'));
-  });
-});
-
 // Dismiss Error
 dismissErrorBtn.addEventListener('click', () => {
   errorState.style.display = 'none';
