@@ -46,10 +46,13 @@ def rule_based_pre_validation(lead: Dict[str, Any]) -> Tuple[bool, str, list]:
     # Validate Bangladesh phone format if phone is provided
     if has_phone:
         is_val, norm_phone, err = normalize_bd_phone(phone)
-        if not is_val:
-            issues.append(f"Invalid Bangladesh phone number format: {err}")
-        else:
+        if is_val:
             lead["phone"] = norm_phone
+        elif has_email:
+            # If phone formatting has minor landline/extension mismatch but valid email exists, keep phone and proceed to AI
+            lead["phone"] = phone
+        else:
+            issues.append(f"Invalid Bangladesh phone number format: {err}")
 
     if issues:
         return False, "; ".join(issues), issues
@@ -117,14 +120,22 @@ def validate_lead_with_ai(lead: Dict[str, Any], target_industry: str = "Hospital
     system_prompt = (
         "You are an expert AI Lead Validation Officer for Sunset Group (Sunset Kuakata Hotel & Resort).\n"
         "Your task is to strictly evaluate whether a scraped lead is a legitimate, relevant, and usable business prospect.\n\n"
+        "BUSINESS CONTEXT & TARGET MARKET:\n"
+        "- Sunset Group (Sunset Kuakata Hotel & Resort) targets corporate B2B clients, conferences, executive retreats,\n"
+        "  seminars, corporate tours, and commercial partnerships across ALL sectors:\n"
+        "  Banking & Finance, Corporate Enterprises, IT, Telecom, Garments, Travel, Associations, Government, and Commercial businesses.\n"
+        "- Any legitimate business entity, company, financial institution, director, manager, or executive with verifiable\n"
+        "  contact info (phone, email, or role) is a VALUABLE and RELEVANT corporate lead.\n\n"
+        "BANGLADESH PHONE RULES:\n"
+        "- Standard mobile numbers (+8801XXXXXXXXX) AND landline numbers (+8802XXXXXXX for Dhaka, +88031XXXXXX for Chittagong, etc.)\n"
+        "  are 100% valid Bangladesh numbers. Any phone starting with +880 is a legitimate format.\n\n"
         "Evaluation criteria:\n"
-        "1. Is this a real business, organization, or decision-maker?\n"
-        "2. Does it appear relevant to the target industry or corporate hospitality market?\n"
-        "3. Is the collected contact information credible and usable?\n"
-        "4. Is the phone number valid Bangladesh format (+880)?\n"
-        "5. Is the website genuine or plausible?\n"
-        "6. Is the information complete enough to be actionable?\n"
-        "7. Is this a duplicate, spam entry, generic directory listing, or irrelevant result?\n\n"
+        "1. Is this a real business, organization, or corporate decision-maker?\n"
+        "2. Does it represent a legitimate business, association, or commercial prospect?\n"
+        "3. Is the collected contact information credible and usable (valid +880 phone or valid email)?\n"
+        "4. Is the website genuine or plausible?\n"
+        "5. Is the information complete enough to be actionable for outreach?\n"
+        "6. Is this a duplicate, spam entry, or irrelevant placeholder result?\n\n"
         "CRITICAL RULES:\n"
         "- Do NOT invent or hallucinate missing information.\n"
         "- Output MUST be valid JSON adhering strictly to the schema:\n"

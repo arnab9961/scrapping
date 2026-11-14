@@ -153,17 +153,24 @@ def extract_semantic_links(soup: BeautifulSoup) -> Tuple[List[str], List[str]]:
     for a in soup.find_all('a', href=True):
         href = a['href'].strip()
         if href.lower().startswith('tel:'):
-            raw_phone = href[4:].split('?')[0].strip()
-            is_val, norm_p, _ = normalize_bd_phone(raw_phone)
-            val = norm_p if is_val else raw_phone
-            if val not in seen_phones:
-                seen_phones.add(val)
-                phones.append(val)
+            raw_target = urllib.parse.unquote(href[4:].split('?')[0]).strip()
+            # Split comma, slash, semicolon separated numbers
+            for raw_chunk in re.split(r'[,;/]', raw_target):
+                raw_chunk = raw_chunk.strip()
+                if not raw_chunk:
+                    continue
+                is_val, norm_p, _ = normalize_bd_phone(raw_chunk)
+                val = norm_p if is_val else raw_chunk
+                if val not in seen_phones:
+                    seen_phones.add(val)
+                    phones.append(val)
         elif href.lower().startswith('mailto:'):
-            raw_email = href[7:].split('?')[0].strip().lower()
-            if '@' in raw_email and raw_email not in seen_emails:
-                seen_emails.add(raw_email)
-                emails.append(raw_email)
+            raw_email = urllib.parse.unquote(href[7:].split('?')[0]).strip().lower()
+            for em_chunk in re.split(r'[,;/]', raw_email):
+                clean_em = re.sub(r'^(?:email|e-mail|mail)\:?', '', em_chunk.strip(), flags=re.IGNORECASE).strip()
+                if '@' in clean_em and clean_em not in seen_emails:
+                    seen_emails.add(clean_em)
+                    emails.append(clean_em)
 
     return phones, emails
 
@@ -214,63 +221,105 @@ def extract_leads_from_html(
     semantic_phones, semantic_emails = extract_semantic_links(soup)
 
     # 3. Table and Profile Card parsing
-    card_elements = soup.select('tr.d-flex, table tbody tr, .card, .profile-card, .directory-item, .member, .company-item, .executive-card')
-    if card_elements:
-        for el in card_elements:
-            el_text = clean_text(el.get_text())
-            el_html = str(el)
+    card_selectors = [
+        'tr.d-flex',
+        '.profile-card',
+        '.directory-item',
+        '.member',
+        '.company-item',
+        '.executive-card',
+        '.team-member',
+        '.card',
+        'table tbody tr'
+    ]
+    for sel in card_selectors:
+        elements = soup.select(sel)
+        if len(elements) >= 1:
+            for el in elements:
+                el_text = clean_text(el.get_text(separator=' '))
+                el_html = str(el)
 
-            # Extract phones & emails for this card
-            card_phones = extract_and_normalize_bd_phones(el_text)
-            card_emails = re.findall(r'\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b', el_text)
-            
-            # Check for tel: or mailto: inside the card
-            sub_soup = BeautifulSoup(el_html, 'html.parser')
-            sub_phones, sub_emails = extract_semantic_links(sub_soup)
-            
-            all_phones = list(dict.fromkeys(card_phones + sub_phones))
-            all_emails = list(dict.fromkeys([e.lower() for e in card_emails + sub_emails]))
+                card_phones = extract_and_normalize_bd_phones(el_text)
+                card_emails = re.findall(r'\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b', el_text)
+                
+                # Check for protected emails (e.g. Bangladesh Bank div/td with onselectstart)
+                for d in el.find_all(['div', 'td', 'span', 'a']):
+                    if d.get('onselectstart') and '@' in d.get_text():
+                        em = d.get_text().strip().lower()
+                        if em not in card_emails:
+                            card_emails.append(em)
 
-            if all_phones or all_emails:
-                cand_person = None
-                cand_role = None
-                cand_org = primary_org
+                # Check for tel: or mailto: inside the card
+                sub_soup = BeautifulSoup(el_html, 'html.parser')
+                sub_phones, sub_emails = extract_semantic_links(sub_soup)
+                
+                all_phones = list(dict.fromkeys(card_phones + sub_phones))
+                all_emails = list(dict.fromkeys([e.lower() for e in card_emails + sub_emails]))
 
-                # Check headings or bold texts
-                for heading in el.find_all(['h1', 'h2', 'h3', 'h4', 'strong', 'font']):
-                    htext = clean_text(heading.get_text())
-                    if htext and htext.lower() not in LABEL_WORDS and len(htext) > 3:
-                        if is_person_name(htext):
-                            cand_person = clean_person_name(htext)
-                            break
-                        elif not cand_org or cand_org == primary_org:
-                            cand_org = htext
+                # Clean any accidental 'email' prefix in captured emails
+                cleaned_emails = []
+                for em in all_emails:
+                    clean_em = re.sub(r'^(?:email|e-mail|mail)\:?', '', em, flags=re.IGNORECASE)
+                    if '@' in clean_em:
+                        cleaned_emails.append(clean_em)
+                all_emails = list(dict.fromkeys(cleaned_emails))
 
-                # Check for designations
-                for d in DESIGNATIONS:
-                    if re.search(r'\b' + re.escape(d) + r'\b', el_text, re.IGNORECASE):
-                        cand_role = d.title()
-                        break
+                if all_phones or all_emails:
+                    cand_person = None
+                    cand_role = None
+                    cand_org = primary_org
 
-                p_name = cand_person or "Contact Person"
-                role = cand_role or "Executive / Decision Maker"
-                phone_str = all_phones[0] if all_phones else "N/A"
-                email_str = all_emails[0] if all_emails else "N/A"
+                    # 1. Regex check for labeled fields like "Name: Md. ..."
+                    m_name = re.search(r'Name:\s*([^\n\r]+?)(?=\s+(?:Designation|Phone|Mobile|Email|\(Off|$))', el_text, re.IGNORECASE)
+                    if m_name:
+                        c_name = clean_person_name(m_name.group(1).strip())
+                        if is_person_name(c_name):
+                            cand_person = c_name
 
-                leads.append({
-                    'business_name': cand_org or primary_org,
-                    'contact_person': p_name,
-                    'designation': role,
-                    'industry': default_category,
-                    'phone': phone_str,
-                    'email': email_str,
-                    'website': page_url,
-                    'address': default_city,
-                    'city': default_city,
-                    'country': "Bangladesh",
-                    'source_url': page_url,
-                    'extraction_technique': 'structured_cards'
-                })
+                    # 2. Regex check for labeled fields like "Designation: Governor"
+                    m_des = re.search(r'Designation:?\s*([^\n\r]+?)(?=\s+(?:Phone|Mobile|Email|Name|$))', el_text, re.IGNORECASE)
+                    if m_des:
+                        cand_role = clean_text(m_des.group(1))
+
+                    # 3. Check headings or bold texts if name not labeled
+                    if not cand_person:
+                        for heading in el.find_all(['h1', 'h2', 'h3', 'h4', 'strong', 'font']):
+                            htext = clean_text(heading.get_text())
+                            if htext and htext.lower() not in LABEL_WORDS and len(htext) > 3:
+                                if is_person_name(htext):
+                                    cand_person = clean_person_name(htext)
+                                    break
+                                elif not cand_org or cand_org == primary_org:
+                                    cand_org = htext
+
+                    # 4. Check for known designations if role not labeled
+                    if not cand_role:
+                        for d in DESIGNATIONS:
+                            if re.search(r'\b' + re.escape(d) + r'\b', el_text, re.IGNORECASE):
+                                cand_role = d.title()
+                                break
+
+                    p_name = cand_person or "Contact Person"
+                    role = cand_role or "Executive / Decision Maker"
+                    phone_str = all_phones[0] if all_phones else "N/A"
+                    email_str = all_emails[0] if all_emails else "N/A"
+
+                    leads.append({
+                        'business_name': cand_org or primary_org,
+                        'contact_person': p_name,
+                        'designation': role,
+                        'industry': default_category,
+                        'phone': phone_str,
+                        'email': email_str,
+                        'website': page_url,
+                        'address': default_city,
+                        'city': default_city,
+                        'country': "Bangladesh",
+                        'source_url': page_url,
+                        'extraction_technique': f'card_{sel}'
+                    })
+            if leads:
+                break
 
     # 4. Fallback to general page text if no structured leads discovered
     if not leads:

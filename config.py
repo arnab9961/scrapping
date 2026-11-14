@@ -42,10 +42,13 @@ MAX_AGENT_ITERATIONS = int(os.getenv("MAX_AGENT_ITERATIONS", "10"))
 HTTP_TIMEOUT_SECONDS = float(os.getenv("HTTP_TIMEOUT_SECONDS", "10.0"))
 PLAYWRIGHT_TIMEOUT_MS = int(os.getenv("PLAYWRIGHT_TIMEOUT_MS", "15000"))
 
+# Server Port Configuration
+PORT = int(os.getenv("PORT", "8001"))
+
 # Database Configuration
-DATA_DIR = BASE_DIR / "data"
+DATA_DIR = Path(os.getenv("DATA_DIR", str(BASE_DIR / "data")))
 DATA_DIR.mkdir(exist_ok=True)
-DB_PATH = DATA_DIR / "sunset_leads.db"
+DB_PATH = Path(os.getenv("DB_PATH", str(DATA_DIR / "sunset_leads.db")))
 
 def has_groq_credentials() -> bool:
     """Returns True if Groq API key is present."""

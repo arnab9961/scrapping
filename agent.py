@@ -250,11 +250,17 @@ def stream_url_leads_generator(
     target_url: str,
     crawl_pagination: bool = True,
     max_pages: int = 10,
+    mode: str = "auto",
     job_id: Optional[str] = None
 ) -> Generator[Dict[str, Any], None, None]:
     """
     Direct URL Lead Scraper with SSRF protection, dual-mode scraping,
     pagination discovery, and Groq AI validation.
+    
+    Supports:
+    - mode="auto": Fast HTTP with auto-upgrade to Playwright for SPAs / bot challenges
+    - mode="dynamic": Forces Headless Stealth Chromium with full JavaScript execution & DOM hydration
+    - mode="http": Fast static HTTP only
     """
     # 1. SSRF Check
     is_safe, clean_url, ssrf_err = validate_safe_url(target_url)
@@ -268,14 +274,22 @@ def stream_url_leads_generator(
     if not job_id:
         job_id = JobManager.create_job("direct_url", clean_url)
 
-    print(f"\n🔗 [Job: {job_id}] Starting Direct URL Scrape for: {clean_url}")
+    print(f"\n🔗 [Job: {job_id}] Starting Direct URL Scrape for: {clean_url} (Mode: {mode})")
 
-    yield {
-        "type": "progress",
-        "job_id": job_id,
-        "count": 0,
-        "message": f"Connecting securely to {clean_url}..."
-    }
+    if mode == "dynamic":
+        yield {
+            "type": "progress",
+            "job_id": job_id,
+            "count": 0,
+            "message": f"🌐 Launching Headless Stealth Chromium to execute dynamic JavaScript & render DOM for {clean_url}..."
+        }
+    else:
+        yield {
+            "type": "progress",
+            "job_id": job_id,
+            "count": 0,
+            "message": f"Connecting to {clean_url}..."
+        }
 
     detector = DuplicateDetector()
     visited_urls = set()
@@ -288,8 +302,8 @@ def stream_url_leads_generator(
 
     visited_urls.add(clean_url)
 
-    # 1. Scrape main page
-    scrape_res = adaptive_scrape(clean_url)
+    # 1. Scrape main page using adaptive engine
+    scrape_res = adaptive_scrape(clean_url, force_browser=(mode == "dynamic"), mode=mode)
     if scrape_res.scraping_mode == "playwright":
         playwright_count += 1
     else:
@@ -304,16 +318,36 @@ def stream_url_leads_generator(
         }
         return
 
-    if scrape_res.render_fallback_used:
+    # Extract leads from main page
+    main_leads = extract_leads_from_html(scrape_res.html, clean_url)
+
+    # Dynamic fallback: If HTTP yielded 0 leads and mode != 'http', automatically upgrade to Playwright dynamic rendering!
+    if len(main_leads) == 0 and scrape_res.scraping_mode != "playwright" and mode != "http":
         yield {
             "type": "progress",
             "job_id": job_id,
             "count": 0,
-            "message": "🛡️ Dynamic rendering detected — upgraded to Headless Browser..."
+            "message": "⚡ Dynamic JavaScript SPA or protected content detected — launching Headless Chromium Browser..."
+        }
+        pw_res = adaptive_scrape(clean_url, force_browser=True, mode="dynamic")
+        if pw_res.html:
+            scrape_res = pw_res
+            playwright_count += 1
+            main_leads = extract_leads_from_html(pw_res.html, clean_url)
+
+    if scrape_res.render_fallback_used or scrape_res.scraping_mode == "playwright":
+        yield {
+            "type": "progress",
+            "job_id": job_id,
+            "count": 0,
+            "message": f"🛡️ Headless Browser rendered dynamic JavaScript successfully ({len(main_leads)} contact candidates detected)..."
         }
 
-    # Extract leads from main page
-    main_leads = extract_leads_from_html(scrape_res.html, clean_url)
+    try:
+        domain_label = urllib.parse.urlparse(clean_url).netloc.replace('www.', '')
+    except Exception:
+        domain_label = "Directory"
+    target_industry_label = f"Corporate & Commercial Directory ({domain_label})"
 
     for cand in main_leads:
         total_scraped += 1
@@ -325,6 +359,30 @@ def stream_url_leads_generator(
         is_dup, dup_reason = detector.check_duplicate(cand)
         if is_dup:
             duplicate_count += 1
+            if "already registered" in (dup_reason or "").lower():
+                # Previously saved qualified lead - yield to direct results table
+                qualified_count += 1
+                lead_out = {
+                    "name": cand.get("contact_person") or cand.get("name") or "Contact Person",
+                    "business_name": cand.get("business_name") or cand.get("organization") or "Direct URL Lead",
+                    "designation": cand.get("designation") or "Executive",
+                    "organization": cand.get("business_name") or cand.get("organization") or "Direct URL Lead",
+                    "category": "Direct Scrape",
+                    "address": cand.get("address") or "N/A",
+                    "city": cand.get("city") or "N/A",
+                    "country": cand.get("country") or "Bangladesh",
+                    "phone": cand.get("phone", "N/A"),
+                    "email": cand.get("email", "N/A"),
+                    "website": cand.get("website", clean_url),
+                    "source_url": clean_url,
+                    "ai_confidence_score": cand.get("ai_confidence_score") or 90,
+                    "ai_validation_reason": "Verified corporate lead (already registered in database)",
+                    "scraping_mode": scrape_res.scraping_mode,
+                    "render_fallback_used": scrape_res.render_fallback_used
+                }
+                yield {"type": "lead", "job_id": job_id, "data": lead_out, "count": qualified_count}
+                continue
+
             rejected_count += 1
             cand["rejection_stage"] = "duplicate"
             cand["reason"] = dup_reason or "Duplicate lead"
@@ -335,7 +393,7 @@ def stream_url_leads_generator(
         detector.record_lead(cand)
 
         # AI validation
-        ai_eval = validate_lead_with_ai(cand, target_industry="Business Directory")
+        ai_eval = validate_lead_with_ai(cand, target_industry=target_industry_label)
         if ai_eval.get("is_valid") and ai_eval.get("recommended_action") == "accept":
             qualified_count += 1
             lead_out = {
@@ -393,7 +451,7 @@ def stream_url_leads_generator(
                     "message": f"Crawling sub-page [{idx}/{len(pagination_links)}]: {sub_url}..."
                 }
 
-                sub_res = adaptive_scrape(sub_url)
+                sub_res = adaptive_scrape(sub_url, force_browser=(mode == "dynamic"), mode=mode)
                 if sub_res.scraping_mode == "playwright":
                     playwright_count += 1
                 else:
@@ -403,6 +461,13 @@ def stream_url_leads_generator(
                     continue
 
                 sub_leads = extract_leads_from_html(sub_res.html, sub_url)
+                if len(sub_leads) == 0 and sub_res.scraping_mode != "playwright" and mode != "http":
+                    pw_sub = adaptive_scrape(sub_url, force_browser=True, mode="dynamic")
+                    if pw_sub.html:
+                        sub_res = pw_sub
+                        playwright_count += 1
+                        sub_leads = extract_leads_from_html(pw_sub.html, sub_url)
+
                 for cand in sub_leads:
                     total_scraped += 1
                     cand["scraping_mode"] = sub_res.scraping_mode
@@ -412,6 +477,29 @@ def stream_url_leads_generator(
                     is_dup, dup_reason = detector.check_duplicate(cand)
                     if is_dup:
                         duplicate_count += 1
+                        if "already registered" in (dup_reason or "").lower():
+                            qualified_count += 1
+                            lead_out = {
+                                "name": cand.get("contact_person") or cand.get("name") or "Contact Person",
+                                "business_name": cand.get("business_name") or cand.get("organization") or "Direct URL Lead",
+                                "designation": cand.get("designation") or "Executive",
+                                "organization": cand.get("business_name") or cand.get("organization") or "Direct URL Lead",
+                                "category": "Direct Scrape",
+                                "address": cand.get("address") or "N/A",
+                                "city": cand.get("city") or "N/A",
+                                "country": cand.get("country") or "Bangladesh",
+                                "phone": cand.get("phone", "N/A"),
+                                "email": cand.get("email", "N/A"),
+                                "website": cand.get("website", sub_url),
+                                "source_url": sub_url,
+                                "ai_confidence_score": cand.get("ai_confidence_score") or 90,
+                                "ai_validation_reason": "Verified corporate lead (already registered in database)",
+                                "scraping_mode": sub_res.scraping_mode,
+                                "render_fallback_used": sub_res.render_fallback_used
+                            }
+                            yield {"type": "lead", "job_id": job_id, "data": lead_out, "count": qualified_count}
+                            continue
+
                         rejected_count += 1
                         cand["rejection_stage"] = "duplicate"
                         cand["reason"] = dup_reason or "Duplicate lead"
@@ -421,7 +509,7 @@ def stream_url_leads_generator(
 
                     detector.record_lead(cand)
 
-                    ai_eval = validate_lead_with_ai(cand, target_industry="Business Directory")
+                    ai_eval = validate_lead_with_ai(cand, target_industry=target_industry_label)
                     if ai_eval.get("is_valid") and ai_eval.get("recommended_action") == "accept":
                         qualified_count += 1
                         lead_out = {

@@ -15,28 +15,25 @@ class DuplicateDetector:
     Checks:
     1. Normalized phone numbers.
     2. Normalized emails.
-    3. Canonical website domain.
-    4. Business name similarity (>85% matching).
+    3. Person name + Organization / Domain uniqueness.
     """
 
     def __init__(self):
         self.seen_phones: Set[str] = set()
         self.seen_emails: Set[str] = set()
-        self.seen_domains: Set[str] = set()
-        self.seen_names: Set[str] = set()
+        self.seen_person_org: Set[Tuple[str, str]] = set()
 
     def check_duplicate(self, lead: Dict[str, Any]) -> Tuple[bool, Optional[str]]:
         phone = lead.get("phone") or ""
         email = lead.get("email") or ""
-        website = lead.get("website") or lead.get("source_url") or ""
-        business_name = lead.get("business_name") or lead.get("organization") or lead.get("name") or ""
+        person = lead.get("contact_person") or lead.get("name") or ""
+        org = lead.get("business_name") or lead.get("organization") or ""
 
         # 1. Check in-memory session cache for Phone
         if phone and phone != "N/A":
             digits = re.sub(r'\D', '', phone)
-            if len(digits) >= 8:
-                if digits in self.seen_phones:
-                    return True, f"Duplicate phone '{phone}' in current session"
+            if len(digits) >= 8 and digits in self.seen_phones:
+                return True, f"Duplicate phone '{phone}' in current session"
 
         # 2. Check in-memory session cache for Email
         if email and email.strip().lower() not in ('n/a', 'none', ''):
@@ -44,28 +41,19 @@ class DuplicateDetector:
             if clean_email in self.seen_emails:
                 return True, f"Duplicate email '{clean_email}' in current session"
 
-        # 3. Check in-memory session cache for Domain
-        domain = extract_canonical_domain(website)
-        generic_domains = {'facebook.com', 'google.com', 'linkedin.com', 'youtube.com', 'instagram.com', 'bb.org.bd', 'bdyellowpages.net'}
-        if domain and domain not in generic_domains and len(domain) > 4:
-            if domain in self.seen_domains:
-                return True, f"Duplicate domain '{domain}' in current session"
+        # 3. Check in-memory session cache for Person Name + Organization
+        if person and len(person) > 3 and person.lower() not in ('contact person', 'representative', 'n/a'):
+            key = (person.lower().strip(), org.lower().strip())
+            if key in self.seen_person_org:
+                return True, f"Duplicate person '{person}' at '{org}' in current session"
 
-        # 4. Check in-memory session cache for Business / Person name similarity
-        if business_name and len(business_name.strip()) > 3:
-            clean_name = business_name.strip().lower()
-            if clean_name not in ('organization', 'direct url lead', 'n/a', 'company', 'contact person'):
-                for existing in self.seen_names:
-                    sim = string_similarity(clean_name, existing)
-                    if sim >= 0.88:
-                        return True, f"High name similarity ({int(sim*100)}%) with '{existing}' in current session"
-
-        # 5. Check persistent Database records
+        # 4. Check persistent Database records
         is_db_dup, reason = is_duplicate_lead(
             phone=phone,
             email=email,
-            website=website,
-            business_name=business_name
+            website=lead.get("website") or lead.get("source_url"),
+            business_name=org,
+            contact_person=person
         )
         if is_db_dup:
             return True, reason
@@ -76,8 +64,8 @@ class DuplicateDetector:
         """Adds lead attributes to in-memory deduplication set."""
         phone = lead.get("phone") or ""
         email = lead.get("email") or ""
-        website = lead.get("website") or lead.get("source_url") or ""
-        business_name = lead.get("business_name") or lead.get("organization") or lead.get("name") or ""
+        person = lead.get("contact_person") or lead.get("name") or ""
+        org = lead.get("business_name") or lead.get("organization") or ""
 
         if phone and phone != "N/A":
             digits = re.sub(r'\D', '', phone)
@@ -87,13 +75,7 @@ class DuplicateDetector:
         if email and email.strip().lower() not in ('n/a', 'none', ''):
             self.seen_emails.add(email.strip().lower())
 
-        domain = extract_canonical_domain(website)
-        generic_domains = {'facebook.com', 'google.com', 'linkedin.com', 'youtube.com', 'instagram.com', 'bb.org.bd', 'bdyellowpages.net'}
-        if domain and domain not in generic_domains:
-            self.seen_domains.add(domain)
-
-        if business_name and len(business_name.strip()) > 3:
-            clean_name = business_name.strip().lower()
-            if clean_name not in ('organization', 'direct url lead', 'n/a', 'company', 'contact person'):
-                self.seen_names.add(clean_name)
+        if person and len(person) > 3 and person.lower() not in ('contact person', 'representative', 'n/a'):
+            key = (person.lower().strip(), org.lower().strip())
+            self.seen_person_org.add(key)
 

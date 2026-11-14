@@ -39,7 +39,7 @@
       <form id="urlScrapeForm" class="search-form">
         <!-- Target Webpage URL -->
         <div class="input-group col-span-12">
-          <label for="urlInput">Target Webpage / Directory URL (Public HTTP/HTTPS only)</label>
+          <label for="urlInput">Target Webpage / Directory URL (Supports Static HTML & Dynamic JavaScript SPAs)</label>
           <input
             type="url"
             id="urlInput"
@@ -47,13 +47,26 @@
             required
             autocomplete="off"
           />
+          <div style="font-size: 12px; color: var(--text-secondary); margin-top: 4px;">
+            ⚡ Dual-Engine: Automatically switches between Fast HTTP and Headless Chromium Dynamic JavaScript (React, Next.js, Vue, Angular, SPAs).
+          </div>
+        </div>
+
+        <!-- Scraping Engine Mode -->
+        <div class="input-group col-span-4">
+          <label for="scrapingModeSelect">⚙️ Scraping Engine</label>
+          <select id="scrapingModeSelect" class="select-input">
+            <option value="auto" selected>⚡ Adaptive Auto (HTTP + Auto JS Upgrade)</option>
+            <option value="dynamic">🌐 Dynamic JavaScript (Headless Chromium Browser)</option>
+            <option value="http">🚀 Fast HTTP Mode (Static HTML)</option>
+          </select>
         </div>
 
         <!-- Options: Pagination & Max Pages -->
         <div class="input-group col-span-4" style="justify-content: center;">
-          <label style="display: flex; align-items: center; gap: 8px; cursor: pointer; font-size: 13px; font-weight: 500;">
+          <label style="display: flex; align-items: center; gap: 8px; cursor: pointer; font-size: 13px; font-weight: 500; height: 100%; margin-top: 24px;">
             <input type="checkbox" id="crawlPagination" checked style="width: 18px; height: 18px; accent-color: var(--primary);" />
-            <span>Follow directory pagination (sub-pages)</span>
+            <span>Follow directory pagination</span>
           </label>
         </div>
 
@@ -67,7 +80,7 @@
           </select>
         </div>
 
-        <div class="col-span-4" style="display: flex; gap: 8px;">
+        <div class="col-span-12" style="display: flex; gap: 8px; margin-top: 8px;">
           <button type="submit" id="scrapeBtn" class="btn btn-primary" style="flex: 1;">
             <span class="btn-text">🚀 Scrape & Validate Leads</span>
             <span class="spinner" style="display: none;"></span>

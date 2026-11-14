@@ -14,9 +14,14 @@ from validators.url import validate_safe_url
 logger = logging.getLogger("scraper")
 
 SPA_ROOT_INDICATORS = [
-    r'<div\s+id=[\'"](?:root|app|__next)[\'"]\s*>\s*</div>',
+    r'<div\s+id=[\'"](?:root|app|__next|__nuxt|main-content|react-root)[\'"]\s*>\s*</div>',
+    r'<app-root\b[^>]*>\s*</app-root>',
     r'<noscript>.*?enable javascript.*?</noscript>',
-    r'<div\s+class=[\'"]app-root[\'"]\s*>\s*</div>'
+    r'<div\s+class=[\'"](?:app-root|react-container|spa-root)[\'"]\s*>\s*</div>',
+    r'id=[\'"](?:__next|__nuxt)[\'"]',
+    r'data-reactroot',
+    r'ng-version=',
+    r'v-cloak'
 ]
 
 CHALLENGE_INDICATORS = [
@@ -27,7 +32,9 @@ CHALLENGE_INDICATORS = [
     'support id is',
     'checking your browser',
     'ray id:',
-    'cloudflare-static'
+    'cloudflare-static',
+    'what code is in the image',
+    'turnstile'
 ]
 
 @dataclass
@@ -51,10 +58,12 @@ def is_anti_bot_challenge(html: str, status_code: int) -> bool:
     """Detects anti-bot firewall challenge pages (Cloudflare, F5, Incapsula, etc.)."""
     if status_code in (403, 429, 503):
         return True
-    if len(html.strip()) < 500:
-        for ind in CHALLENGE_INDICATORS:
-            if ind.lower() in html.lower():
-                return True
+    if not html:
+        return True
+    html_lower = html.lower()
+    for ind in CHALLENGE_INDICATORS:
+        if ind.lower() in html_lower:
+            return True
     return False
 
 def requires_dynamic_rendering(html: str, body_text: str) -> bool:
@@ -63,16 +72,25 @@ def requires_dynamic_rendering(html: str, body_text: str) -> bool:
     and lacks meaningful server-rendered HTML content.
     """
     clean_text = re.sub(r'\s+', ' ', body_text).strip()
+    words = clean_text.split()
     
-    # 1. Very small body text but contains SPA root containers
-    if len(clean_text) < 150:
+    # 1. Very small body text but contains dynamic frameworks or script tags
+    if len(words) < 50:
         for pattern in SPA_ROOT_INDICATORS:
             if re.search(pattern, html, re.IGNORECASE):
                 return True
+        if len(words) < 20 and ('<script' in html.lower() or '<noscript' in html.lower()):
+            return True
 
     # 2. Explicit JavaScript required notice
-    if re.search(r'you need to enable javascript to run this app', html, re.IGNORECASE):
+    if re.search(r'you need to enable javascript|please enable javascript|javascript is required|enable javascript to run this app', html, re.IGNORECASE):
         return True
+
+    # 3. Dynamic framework indicators with missing contact/person keywords
+    if any(m in html.lower() for m in ['id="__next"', 'id="root"', 'id="app"', 'id="__nuxt"', '<app-root', 'data-reactroot']):
+        # If the page has fewer than 150 words or lacks key contact cues
+        if len(words) < 150 or not re.search(r'\b(?:phone|tel|mobile|email|contact|office|manager|director|executive|secretary|president)\b', clean_text, re.IGNORECASE):
+            return True
 
     return False
 
@@ -114,16 +132,41 @@ def fetch_http_mode(url: str, timeout: float = 10.0) -> Tuple[Optional[str], int
     except Exception as e:
         return None, 0, str(e)
 
-def fetch_playwright_mode(url: str, timeout: int = 15000) -> Tuple[Optional[str], int, Optional[str]]:
+def fetch_playwright_mode(
+    url: str,
+    timeout: int = 20000,
+    wait_ms: int = 2500,
+    scroll_down: bool = True
+) -> Tuple[Optional[str], int, Optional[str]]:
     """
     Mode B: Headless stealth browser dynamic scraping using Playwright.
+    Executes full client-side JavaScript, handles React/Vue/Angular DOM hydration,
+    scrolls to trigger lazy loading, and extracts the fully rendered DOM.
     """
+    def dynamic_js_action(page):
+        if not scroll_down:
+            return
+        try:
+            # Scroll progressively to trigger lazy loading and dynamic AJAX requests
+            page.evaluate("window.scrollTo(0, document.body.scrollHeight / 3);")
+            page.wait_for_timeout(400)
+            page.evaluate("window.scrollTo(0, document.body.scrollHeight * 2 / 3);")
+            page.wait_for_timeout(400)
+            page.evaluate("window.scrollTo(0, document.body.scrollHeight);")
+            page.wait_for_timeout(600)
+            page.evaluate("window.scrollTo(0, 0);")
+        except Exception as e:
+            logger.debug(f"dynamic_js_action scroll exception: {e}")
+
     try:
         page = StealthyFetcher.fetch(
             url,
             headless=True,
             timeout=timeout,
-            network_idle=False
+            wait=wait_ms,
+            network_idle=False,
+            load_dom=True,
+            page_action=dynamic_js_action
         )
         if page:
             html = extract_response_html(page)
@@ -133,17 +176,21 @@ def fetch_playwright_mode(url: str, timeout: int = 15000) -> Tuple[Optional[str]
     except Exception as e:
         return None, 0, str(e)
 
-def adaptive_scrape(url: str, force_browser: bool = False, max_retries: int = 2) -> ScrapeResult:
+def adaptive_scrape(
+    url: str,
+    force_browser: bool = False,
+    mode: str = "auto",
+    max_retries: int = 2
+) -> ScrapeResult:
     """
     Intelligent dual-mode scraper with automatic detection, retry logic,
     and fallback mechanism.
     
-    Workflow:
-    1. Validate safe URL (SSRF check).
-    2. Try HTTP mode (Mode A).
-    3. Analyze HTML for meaningful content, anti-bot challenge, or SPA markers.
-    4. Automatically upgrade to Playwright (Mode B) if needed.
-    5. Return complete ScrapeResult with mode and fallback metadata.
+    Modes:
+    - 'auto': Attempts fast HTTP first; automatically upgrades to Playwright if
+              anti-bot challenge or dynamic JavaScript SPA is detected.
+    - 'dynamic': Forces Headless Chromium with full JavaScript execution and DOM rendering.
+    - 'http': Forces HTTP-only mode.
     """
     now_iso = datetime.utcnow().isoformat() + "Z"
 
@@ -161,8 +208,8 @@ def adaptive_scrape(url: str, force_browser: bool = False, max_retries: int = 2)
             error_message=f"SSRF Protection: {ssrf_err}"
         )
 
-    # If force_browser requested explicitly
-    if force_browser:
+    # If force_browser or mode == 'dynamic' requested explicitly
+    if force_browser or mode == "dynamic":
         html, status, err = fetch_playwright_mode(clean_url, timeout=config.PLAYWRIGHT_TIMEOUT_MS)
         if html:
             adaptor = Adaptor(html)
@@ -197,6 +244,31 @@ def adaptive_scrape(url: str, force_browser: bool = False, max_retries: int = 2)
         if http_html:
             break
         time.sleep(attempt * 0.5)
+
+    # If mode is strictly 'http', return result without upgrading to Playwright
+    if mode == "http":
+        if http_html:
+            adaptor = Adaptor(http_html)
+            return ScrapeResult(
+                html=http_html,
+                status_code=http_status,
+                scraping_mode="http",
+                render_fallback_used=False,
+                source_url=clean_url,
+                scraped_at=now_iso,
+                extraction_status="success",
+                page_adaptor=adaptor
+            )
+        return ScrapeResult(
+            html="",
+            status_code=http_status or 500,
+            scraping_mode="http",
+            render_fallback_used=False,
+            source_url=clean_url,
+            scraped_at=now_iso,
+            extraction_status="error",
+            error_message=f"HTTP failed: {last_err}"
+        )
 
     # Step 3: Evaluate HTTP response
     if http_html:

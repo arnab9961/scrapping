@@ -248,14 +248,14 @@ def test_groq_ai_validation_real_api():
         pytest.skip("Groq credentials not configured in environment.")
 
     valid_candidate = {
-        "business_name": "Sunset Kuakata Luxury Resort",
+        "business_name": "Meghna Group of Industries",
         "contact_person": "Md. Kamrul Hasan",
-        "designation": "Managing Director",
+        "designation": "Head of Corporate Admin",
         "phone": "+8801712345678",
-        "email": "md@sunsetkuakata.com",
-        "website": "https://sunsetkuakata.com",
-        "city": "Kuakata",
-        "source_url": "https://sunsetkuakata.com/contact"
+        "email": "kamrul@meghnagroup.biz",
+        "website": "https://meghnagroup.biz",
+        "city": "Dhaka",
+        "source_url": "https://meghnagroup.biz/contact"
     }
 
     result = validate_lead_with_ai(valid_candidate, target_industry="Hospitality & Resorts")

@@ -49,6 +49,7 @@ class DirectUrlScrapeRequest(BaseModel):
     url: str
     crawl_pagination: Optional[bool] = True
     max_pages: Optional[int] = Field(default=5, ge=0, le=50)
+    mode: Optional[str] = Field(default="auto", description="Scraping mode: auto, dynamic, or http")
 
 class PhoneValidationRequest(BaseModel):
     phone: str
@@ -217,7 +218,8 @@ def stream_search(
 def stream_url_scrape(
     url: str = Query(..., description="Target webpage URL to scrape"),
     crawl_pagination: bool = Query(True),
-    max_pages: int = Query(5, ge=0, le=50)
+    max_pages: int = Query(5, ge=0, le=50),
+    mode: Optional[str] = Query("auto", description="Scraping mode: auto, dynamic, or http")
 ):
     target_url = url.strip()
     if not target_url:
@@ -227,7 +229,11 @@ def stream_url_scrape(
     if not is_safe:
         raise HTTPException(status_code=400, detail=f"Invalid URL: {ssrf_err}")
 
-    job_id = JobManager.create_job("direct_url", clean_url)
+    scrape_mode = (mode or "auto").strip().lower()
+    if scrape_mode not in ("auto", "dynamic", "http"):
+        scrape_mode = "auto"
+
+    job_id = JobManager.create_job("direct_url", f"{clean_url} [{scrape_mode}]")
 
     def event_stream():
         try:
@@ -235,6 +241,7 @@ def stream_url_scrape(
                 clean_url,
                 crawl_pagination=crawl_pagination,
                 max_pages=max_pages,
+                mode=scrape_mode,
                 job_id=job_id
             ):
                 yield f"data: {json.dumps(event, ensure_ascii=False)}\n\n"
@@ -289,19 +296,23 @@ def scrape_url_sync(req: DirectUrlScrapeRequest):
     if not is_safe:
         raise HTTPException(status_code=400, detail=f"Invalid URL: {ssrf_err}")
 
+    scrape_mode = (req.mode or "auto").strip().lower()
     leads = []
-    for event in stream_url_leads_generator(clean_url, crawl_pagination=req.crawl_pagination, max_pages=req.max_pages):
+    for event in stream_url_leads_generator(clean_url, crawl_pagination=req.crawl_pagination, max_pages=req.max_pages, mode=scrape_mode):
         if event.get("type") == "lead":
             leads.append(event["data"])
 
     return {
         "status": "success",
         "url": clean_url,
+        "mode": scrape_mode,
         "total_leads": len(leads),
         "leads": leads
     }
 
 if __name__ == "__main__":
     import uvicorn
-    print("\n🌅 Sunset Group Lead Scraping & AI Validation System: http://127.0.0.1:8000")
-    uvicorn.run("app:app", host="127.0.0.1", port=8000, reload=True)
+    import os
+    port = int(os.getenv("PORT", "8001"))
+    print(f"\n🌅 Sunset Group Lead Scraping & AI Validation System: http://127.0.0.1:{port}")
+    uvicorn.run("app:app", host="0.0.0.0", port=port, reload=True)

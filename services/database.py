@@ -125,14 +125,14 @@ def is_duplicate_lead(
     phone: Optional[str] = None,
     email: Optional[str] = None,
     website: Optional[str] = None,
-    business_name: Optional[str] = None
+    business_name: Optional[str] = None,
+    contact_person: Optional[str] = None
 ) -> Tuple[bool, Optional[str]]:
     """
     Checks if this lead is already in the database using:
     - Normalized phone match
     - Normalized email match
-    - Canonical website domain match
-    - Business name similarity (exact or normalized)
+    - Person Name + Business Name / Domain match
     
     Returns (is_dup, reason_string)
     """
@@ -143,36 +143,36 @@ def is_duplicate_lead(
         if phone and phone != "N/A":
             digits = re.sub(r'\D', '', phone)
             if len(digits) >= 8:
-                cursor.execute("SELECT id, business_name FROM leads WHERE phone = ? LIMIT 1", (phone,))
+                cursor.execute("SELECT id, business_name, contact_person FROM leads WHERE phone = ? LIMIT 1", (phone,))
                 row = cursor.fetchone()
                 if row:
-                    return True, f"Duplicate phone '{phone}' already registered for '{row['business_name']}' (ID #{row['id']})"
+                    return True, f"Duplicate phone '{phone}' already registered for '{row['contact_person']}' at '{row['business_name']}' (ID #{row['id']})"
 
         # 2. Match by Email
         if email and email.strip().lower() not in ('n/a', 'none', ''):
             clean_email = email.strip().lower()
-            cursor.execute("SELECT id, business_name FROM leads WHERE LOWER(email) = ? LIMIT 1", (clean_email,))
+            cursor.execute("SELECT id, business_name, contact_person FROM leads WHERE LOWER(email) = ? LIMIT 1", (clean_email,))
             row = cursor.fetchone()
             if row:
-                return True, f"Duplicate email '{clean_email}' already registered for '{row['business_name']}' (ID #{row['id']})"
+                return True, f"Duplicate email '{clean_email}' already registered for '{row['contact_person']}' at '{row['business_name']}' (ID #{row['id']})"
 
-        # 3. Match by Canonical Domain (if not a generic portal)
+        # 3. Match by Person Name + Business Name or Domain (prevents duplicate person records)
+        clean_pname = (contact_person or "").strip().lower()
+        clean_bname = (business_name or "").strip().lower()
         domain = extract_canonical_domain(website or "")
-        generic_domains = {'facebook.com', 'google.com', 'linkedin.com', 'youtube.com', 'instagram.com', 'bb.org.bd', 'bdyellowpages.net'}
-        if domain and domain not in generic_domains and len(domain) > 4:
-            cursor.execute("SELECT id, business_name FROM leads WHERE canonical_domain = ? LIMIT 1", (domain,))
-            row = cursor.fetchone()
-            if row:
-                return True, f"Duplicate domain '{domain}' already registered for '{row['business_name']}' (ID #{row['id']})"
 
-        # 4. Match by Business Name (exact case-insensitive match if substantial)
-        if business_name and len(business_name.strip()) > 3:
-            clean_bname = business_name.strip().lower()
-            if clean_bname not in ('organization', 'direct url lead', 'n/a', 'company', 'lead'):
-                cursor.execute("SELECT id, business_name FROM leads WHERE LOWER(business_name) = ? LIMIT 1", (clean_bname,))
+        if clean_pname and len(clean_pname) > 3 and clean_pname not in ('contact person', 'representative', 'n/a'):
+            if clean_bname and clean_bname not in ('organization', 'direct url lead', 'n/a', 'company', 'lead'):
+                cursor.execute("SELECT id FROM leads WHERE LOWER(contact_person) = ? AND LOWER(business_name) = ? LIMIT 1", (clean_pname, clean_bname))
                 row = cursor.fetchone()
                 if row:
-                    return True, f"Duplicate business name '{business_name}' already registered (ID #{row['id']})"
+                    return True, f"Duplicate record: '{contact_person}' at '{business_name}' already exists (ID #{row['id']})"
+
+            if domain and len(domain) > 4:
+                cursor.execute("SELECT id FROM leads WHERE LOWER(contact_person) = ? AND canonical_domain = ? LIMIT 1", (clean_pname, domain))
+                row = cursor.fetchone()
+                if row:
+                    return True, f"Duplicate record: '{contact_person}' on domain '{domain}' already exists (ID #{row['id']})"
 
     return False, None
 

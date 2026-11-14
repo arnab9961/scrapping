@@ -67,3 +67,26 @@ def test_adaptive_scrape_defaults_to_http():
     assert res.source_url == "https://example.com"
     assert "Example Domain" in res.html
 
+def test_adaptive_scrape_mode_dynamic():
+    res = adaptive_scrape("https://example.com", mode="dynamic")
+    assert res.extraction_status == "success"
+    assert res.scraping_mode == "playwright"
+    assert "Example Domain" in res.html
+
+def test_spa_detection_expanded_frameworks():
+    angular_html = "<html><head><title>Portal</title></head><body><app-root></app-root><script src='main.js'></script></body></html>"
+    assert requires_dynamic_rendering(angular_html, "Portal") is True
+
+    nuxt_html = "<html><head><title>Nuxt App</title></head><body><div id='__nuxt'></div></body></html>"
+    assert requires_dynamic_rendering(nuxt_html, "Nuxt App") is True
+
+def test_direct_url_stream_endpoint_supports_mode():
+    from fastapi.testclient import TestClient
+    from app import app
+    client = TestClient(app)
+    # Validate that endpoint accepts mode=dynamic without error
+    resp = client.get("/api/scrape-url/stream?url=https://example.com&mode=dynamic")
+    assert resp.status_code == 200
+    assert "text/event-stream" in resp.headers.get("content-type", "")
+
+

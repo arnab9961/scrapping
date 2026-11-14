@@ -5,6 +5,7 @@ let activeEventSource = null;
 // DOM Elements
 const urlScrapeForm = document.getElementById('urlScrapeForm');
 const urlInput = document.getElementById('urlInput');
+const scrapingModeSelect = document.getElementById('scrapingModeSelect');
 const crawlPagination = document.getElementById('crawlPagination');
 const maxPagesInput = document.getElementById('maxPagesInput');
 const scrapeBtn = document.getElementById('scrapeBtn');
@@ -74,6 +75,7 @@ urlScrapeForm.addEventListener('submit', (e) => {
 
   const shouldCrawlPag = crawlPagination ? crawlPagination.checked : true;
   const maxPages = shouldCrawlPag ? (parseInt(maxPagesInput.value, 10) || 5) : 0;
+  const scrapingMode = scrapingModeSelect ? scrapingModeSelect.value : 'auto';
 
   activeUrl = targetUrl;
 
@@ -100,7 +102,7 @@ urlScrapeForm.addEventListener('submit', (e) => {
     sourcePill.textContent = `🌐 Direct URL`;
   }
 
-  const streamUrl = `/api/scrape-url/stream?url=${encodeURIComponent(targetUrl)}&crawl_pagination=${shouldCrawlPag}&max_pages=${maxPages}`;
+  const streamUrl = `/api/scrape-url/stream?url=${encodeURIComponent(targetUrl)}&crawl_pagination=${shouldCrawlPag}&max_pages=${maxPages}&mode=${encodeURIComponent(scrapingMode)}`;
   activeEventSource = new EventSource(streamUrl);
 
   activeEventSource.onmessage = (event) => {
@@ -154,7 +156,7 @@ function appendLead(lead) {
   const score = lead.ai_confidence_score || 90;
   const scoreBadgeClass = score >= 85 ? 'badge-score-high' : (score >= 60 ? 'badge-score-mid' : 'badge-score-low');
   const modeClass = lead.scraping_mode === 'playwright' ? 'badge-mode-playwright' : 'badge-mode-http';
-  const modeLabel = lead.scraping_mode === 'playwright' ? '⚡ Playwright' : '🌐 HTTP';
+  const modeLabel = lead.scraping_mode === 'playwright' ? '🌐 Dynamic JS (Chromium)' : '🚀 Fast HTTP';
 
   const tr = document.createElement('tr');
   tr.innerHTML = `

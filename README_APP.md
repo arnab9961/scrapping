@@ -159,25 +159,48 @@ PLAYWRIGHT_TIMEOUT_MS=15000
 
 ## 🚀 Installation & Startup Instructions
 
-### 1. Install Dependencies
-```powershell
-pip install -r requirements.txt
-playwright install chromium
+### Option 1: Run with Docker (Recommended)
+
+1. Make sure your `.env` file contains your `GROQ_CLOUD_API_KEY`.
+2. Build and run using Docker Compose:
+```bash
+docker compose up -d --build
+```
+Or with Docker CLI:
+```bash
+docker build -t sunset-leads:latest .
+docker run -d -p 8001:8001 --env-file .env -v ${PWD}/data:/app/data --name sunset-leads-app sunset-leads:latest
 ```
 
-### 2. Run the Server
+3. Open in browser:
+- **Search Leads**: [http://127.0.0.1:8001/](http://127.0.0.1:8001/)
+- **Direct URL Scraper**: [http://127.0.0.1:8001/url-scraper](http://127.0.0.1:8001/url-scraper)
+- **Scraping Dashboard**: [http://127.0.0.1:8001/dashboard](http://127.0.0.1:8001/dashboard)
+
+---
+
+### Option 2: Local Python Execution
+
+1. **Install Dependencies**:
+```powershell
+pip install -r requirements.txt
+python -m patchright install --with-deps chromium
+python -m playwright install chromium
+```
+
+2. **Run the Server (Port 8001)**:
 ```powershell
 python app.py
 ```
 Or with Uvicorn:
 ```powershell
-uvicorn app:app --host 127.0.0.1 --port 8000 --reload
+uvicorn app:app --host 0.0.0.0 --port 8001 --reload
 ```
 
-### 3. Open in Browser
-- **Search Leads**: [http://127.0.0.1:8000/](http://127.0.0.1:8000/)
-- **Direct URL Scraper**: [http://127.0.0.1:8000/url-scraper](http://127.0.0.1:8000/url-scraper)
-- **Scraping Dashboard**: [http://127.0.0.1:8000/dashboard](http://127.0.0.1:8000/dashboard)
+3. **Open in Browser**:
+- **Search Leads**: [http://127.0.0.1:8001/](http://127.0.0.1:8001/)
+- **Direct URL Scraper**: [http://127.0.0.1:8001/url-scraper](http://127.0.0.1:8001/url-scraper)
+- **Scraping Dashboard**: [http://127.0.0.1:8001/dashboard](http://127.0.0.1:8001/dashboard)
 
 ---
 
