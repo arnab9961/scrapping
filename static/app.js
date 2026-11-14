@@ -163,10 +163,6 @@ function updateMetrics(leads) {
 
 function appendLeadRow(lead, idx) {
   const tr = document.createElement('tr');
-  const score = lead.ai_confidence_score || 90;
-  const scoreBadgeClass = score >= 85 ? 'badge-score-high' : (score >= 60 ? 'badge-score-mid' : 'badge-score-low');
-  const modeClass = lead.scraping_mode === 'playwright' ? 'badge-mode-playwright' : 'badge-mode-http';
-  const modeLabel = lead.scraping_mode === 'playwright' ? '⚡ Playwright' : '🌐 HTTP';
 
   tr.innerHTML = `
     <td><strong>${idx}</strong></td>
@@ -176,8 +172,6 @@ function appendLeadRow(lead, idx) {
     <td>${renderPhone(lead.phone)}</td>
     <td>${renderEmail(lead.email)}</td>
     <td>${escapeHtml(lead.city || activeCity)}</td>
-    <td><span class="badge-score ${scoreBadgeClass}">AI: ${score}%</span></td>
-    <td><span class="badge-mode ${modeClass}">${modeLabel}</span></td>
     <td>${renderLink(lead.source_url || lead.website, 'Source')}</td>
   `;
   leadsTableBody.appendChild(tr);
@@ -207,7 +201,7 @@ filterInput.addEventListener('input', (e) => {
 copyAllBtn.addEventListener('click', async () => {
   if (currentLeads.length === 0) return;
 
-  const header = ['#', 'Business Name', 'Contact Person', 'Designation', 'Phone', 'Email', 'City', 'AI Score', 'Source'];
+  const header = ['#', 'Business Name', 'Contact Person', 'Designation', 'Phone', 'Email', 'City', 'Source'];
   const rows = currentLeads.map((l, i) => [
     i + 1,
     l.business_name || l.organization || '',
@@ -216,7 +210,6 @@ copyAllBtn.addEventListener('click', async () => {
     l.phone || '',
     l.email || '',
     l.city || activeCity,
-    `${l.ai_confidence_score || 90}%`,
     l.source_url || ''
   ].join('\t'));
 

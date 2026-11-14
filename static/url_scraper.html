@@ -17,7 +17,7 @@
         <img src="/static/Sunset-Group-Logo.png" alt="Sunset Group Logo" class="brand-logo" />
         <div>
           <h1 class="brand-title">Sunset Group</h1>
-          <p class="subtitle">Direct URL Scraper & AI Validation • Dual-Mode HTTP & Playwright</p>
+          <p class="subtitle">Direct URL Scraper & AI Validation</p>
         </div>
       </div>
       <div class="header-right">
@@ -38,8 +38,8 @@
     <div class="card search-card">
       <form id="urlScrapeForm" class="search-form">
         <!-- Target Webpage URL -->
-        <div class="input-group col-span-12">
-          <label for="urlInput">Target Webpage / Directory URL (Supports Static HTML & Dynamic JavaScript SPAs)</label>
+        <div class="input-group col-span-9">
+          <label for="urlInput">Target Webpage / Directory URL</label>
           <input
             type="url"
             id="urlInput"
@@ -49,40 +49,12 @@
           />
         </div>
 
-        <!-- Scraping Engine Mode -->
-        <div class="input-group col-span-4">
-          <label for="scrapingModeSelect">⚙️ Scraping Engine</label>
-          <select id="scrapingModeSelect" class="select-input">
-            <option value="auto" selected>⚡ Adaptive Auto (HTTP + Auto JS Upgrade)</option>
-            <option value="dynamic">🌐 Dynamic JavaScript (Headless Chromium Browser)</option>
-            <option value="http">🚀 Fast HTTP Mode (Static HTML)</option>
-          </select>
-        </div>
-
-        <!-- Options: Pagination & Max Pages -->
-        <div class="input-group col-span-4" style="justify-content: center;">
-          <label style="display: flex; align-items: center; gap: 8px; cursor: pointer; font-size: 13px; font-weight: 500; height: 100%; margin-top: 24px;">
-            <input type="checkbox" id="crawlPagination" checked style="width: 18px; height: 18px; accent-color: var(--primary);" />
-            <span>Follow directory pagination</span>
-          </label>
-        </div>
-
-        <div class="input-group col-span-4">
-          <label for="maxPagesInput">Max Sub-Pages to Crawl</label>
-          <select id="maxPagesInput" class="select-input">
-            <option value="5" selected>⚡ Up to 5 Sub-Pages (Fast)</option>
-            <option value="10">📋 Up to 10 Sub-Pages</option>
-            <option value="25">🔥 Up to 25 Sub-Pages</option>
-            <option value="0">📄 Single Page Only (No Pagination)</option>
-          </select>
-        </div>
-
-        <div class="col-span-12" style="display: flex; gap: 8px; margin-top: 8px;">
-          <button type="submit" id="scrapeBtn" class="btn btn-primary" style="flex: 1;">
-            <span class="btn-text">🚀 Scrape & Validate Leads</span>
+        <div class="col-span-3" style="display: flex; gap: 8px; align-items: flex-end;">
+          <button type="submit" id="scrapeBtn" class="btn btn-primary" style="flex: 1; height: 42px;">
+            <span class="btn-text">🚀 Scrape & Validate</span>
             <span class="spinner" style="display: none;"></span>
           </button>
-          <button type="button" id="stopBtn" class="btn btn-secondary" style="display: none;">
+          <button type="button" id="stopBtn" class="btn btn-secondary" style="display: none; height: 42px;">
             ⏹️ Stop
           </button>
         </div>
@@ -160,8 +132,6 @@
               <th>Designation</th>
               <th>Phone (+880)</th>
               <th>Email</th>
-              <th>AI Score</th>
-              <th>Mode</th>
               <th>Source URL</th>
             </tr>
           </thead>

@@ -492,20 +492,59 @@ body {
   border: 1px solid #bfdbfe;
 }
 
-/* Table */
+/* Table & Horizontal Scrolling */
 .table-container {
   padding: 0;
+  width: 100%;
+  max-width: 100%;
   overflow-x: auto;
+  overflow-y: visible;
   border-radius: var(--radius-lg);
   border: 1px solid var(--border-color);
   background: white;
+  box-shadow: var(--shadow-sm);
+  scrollbar-width: thin;
+  scrollbar-color: #94a3b8 #f1f5f9;
+  -webkit-overflow-scrolling: touch;
+}
+
+/* Accessible, discoverable horizontal scrollbar */
+.table-container::-webkit-scrollbar {
+  height: 10px;
+  width: 10px;
+}
+
+.table-container::-webkit-scrollbar-track {
+  background: #f1f5f9;
+  border-radius: 6px;
+}
+
+.table-container::-webkit-scrollbar-thumb {
+  background-color: #94a3b8;
+  border-radius: 6px;
+  border: 2px solid #f1f5f9;
+}
+
+.table-container::-webkit-scrollbar-thumb:hover {
+  background-color: #64748b;
 }
 
 .leads-table {
   width: 100%;
+  min-width: 920px;
   border-collapse: collapse;
   text-align: left;
   font-size: 13px;
+}
+
+.leads-table th,
+.leads-table td {
+  white-space: nowrap;
+}
+
+.leads-table td:nth-child(2) {
+  white-space: normal;
+  min-width: 180px;
 }
 
 .leads-table th {

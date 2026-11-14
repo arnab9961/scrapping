@@ -27,8 +27,7 @@ OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "").strip()
 LLM_BASE_URL = os.getenv("LLM_BASE_URL", "https://api.openai.com/v1").strip()
 LLM_MODEL = os.getenv("LLM_MODEL", "gpt-4o-mini").strip()
 
-# Search API Configurations (Optional)
-SERPAPI_API_KEY = os.getenv("SERPAPI_API_KEY", "").strip()
+# Primary Search API Configuration (Brave Search)
 BRAVE_SEARCH_API_KEY = os.getenv("BRAVE_SEARCH_API_KEY", "").strip()
 
 # Scraper & Crawler Settings
@@ -58,8 +57,6 @@ def has_llm_credentials() -> bool:
     """Returns True if any LLM credentials exist."""
     return bool(GROQ_CLOUD_API_KEY or OPENAI_API_KEY)
 
-def has_serpapi_credentials() -> bool:
-    return bool(SERPAPI_API_KEY)
-
 def has_brave_credentials() -> bool:
+    """Returns True if Brave Search API key is present."""
     return bool(BRAVE_SEARCH_API_KEY)

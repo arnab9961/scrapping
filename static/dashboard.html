@@ -67,12 +67,6 @@
       </div>
 
       <div class="stat-card">
-        <span class="stat-label">🌐 HTTP vs ⚡ Playwright</span>
-        <span id="statModes" class="stat-value" style="font-size: 20px;">0 / 0</span>
-        <span class="stat-sub">Scraping modes utilized</span>
-      </div>
-
-      <div class="stat-card">
         <span class="stat-label">⚙️ Active / Failed Jobs</span>
         <span id="statJobs" class="stat-value" style="font-size: 20px;">0 / 0</span>
         <span class="stat-sub">Current job execution health</span>
@@ -106,7 +100,6 @@
           />
           <select id="dashSortSelect" class="select-input" style="width: 170px; height: 38px; font-size: 13px; padding: 0 10px;">
             <option value="created_at:desc" selected>📅 Newest First</option>
-            <option value="ai_confidence_score:desc">🔥 Highest AI Score</option>
             <option value="business_name:asc">🔤 Business (A-Z)</option>
           </select>
           <button id="dashExportCsvBtn" class="btn btn-success" style="height: 38px; font-size: 13px; padding: 0 16px;">
@@ -129,8 +122,6 @@
                 <th>Phone (+880)</th>
                 <th>Email</th>
                 <th>City</th>
-                <th>AI Score</th>
-                <th>Mode</th>
                 <th>Date</th>
                 <th>Source</th>
               </tr>

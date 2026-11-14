@@ -5,9 +5,6 @@ let activeEventSource = null;
 // DOM Elements
 const urlScrapeForm = document.getElementById('urlScrapeForm');
 const urlInput = document.getElementById('urlInput');
-const scrapingModeSelect = document.getElementById('scrapingModeSelect');
-const crawlPagination = document.getElementById('crawlPagination');
-const maxPagesInput = document.getElementById('maxPagesInput');
 const scrapeBtn = document.getElementById('scrapeBtn');
 const stopBtn = document.getElementById('stopBtn');
 const stopStreamBtn = document.getElementById('stopStreamBtn');
@@ -65,9 +62,10 @@ urlScrapeForm.addEventListener('submit', (e) => {
     urlInput.value = targetUrl;
   }
 
-  const shouldCrawlPag = crawlPagination ? crawlPagination.checked : true;
-  const maxPages = shouldCrawlPag ? (parseInt(maxPagesInput.value, 10) || 5) : 0;
-  const scrapingMode = scrapingModeSelect ? scrapingModeSelect.value : 'auto';
+  // Internal defaults: crawl pagination up to 5 sub-pages with adaptive auto engine
+  const shouldCrawlPag = true;
+  const maxPages = 5;
+  const scrapingMode = 'auto';
 
   activeUrl = targetUrl;
 
@@ -145,11 +143,6 @@ function appendLead(lead) {
   phoneCountPill.textContent = `📞 ${withPhone} with phone`;
   emailCountPill.textContent = `📧 ${withEmail} with email`;
 
-  const score = lead.ai_confidence_score || 90;
-  const scoreBadgeClass = score >= 85 ? 'badge-score-high' : (score >= 60 ? 'badge-score-mid' : 'badge-score-low');
-  const modeClass = lead.scraping_mode === 'playwright' ? 'badge-mode-playwright' : 'badge-mode-http';
-  const modeLabel = lead.scraping_mode === 'playwright' ? '🌐 Dynamic JS (Chromium)' : '🚀 Fast HTTP';
-
   const tr = document.createElement('tr');
   tr.innerHTML = `
     <td><strong>${index}</strong></td>
@@ -158,8 +151,6 @@ function appendLead(lead) {
     <td><span class="badge-role">${escapeHtml(lead.designation || 'Executive')}</span></td>
     <td>${renderPhone(lead.phone)}</td>
     <td>${renderEmail(lead.email)}</td>
-    <td><span class="badge-score ${scoreBadgeClass}">AI: ${score}%</span></td>
-    <td><span class="badge-mode ${modeClass}">${modeLabel}</span></td>
     <td>${renderLink(lead.source_url, 'Source')}</td>
   `;
   leadsTableBody.appendChild(tr);
@@ -209,7 +200,7 @@ filterInput.addEventListener('input', (e) => {
 copyAllBtn.addEventListener('click', () => {
   if (currentLeads.length === 0) return;
   const text = currentLeads.map((l, i) => 
-    `[${i + 1}] ${l.business_name || l.organization} | ${l.name || l.contact_person} (${l.designation})\nPhone: ${l.phone} | Email: ${l.email} | AI Score: ${l.ai_confidence_score}%\nSource: ${l.source_url}`
+    `[${i + 1}] ${l.business_name || l.organization} | ${l.name || l.contact_person} (${l.designation})\nPhone: ${l.phone} | Email: ${l.email}\nSource: ${l.source_url}`
   ).join('\n\n');
 
   navigator.clipboard.writeText(text).then(() => {
@@ -222,7 +213,7 @@ copyAllBtn.addEventListener('click', () => {
 exportCsvBtn.addEventListener('click', () => {
   if (currentLeads.length === 0) return;
 
-  const headers = ['#', 'Business Name', 'Contact Person', 'Designation', 'Phone', 'Email', 'AI Confidence', 'Scraping Mode', 'Source URL'];
+  const headers = ['#', 'Business Name', 'Contact Person', 'Designation', 'Phone', 'Email', 'Source URL'];
   const csvRows = [headers.join(',')];
 
   currentLeads.forEach((l, i) => {
@@ -233,8 +224,6 @@ exportCsvBtn.addEventListener('click', () => {
       escapeCsv(l.designation),
       escapeCsv(l.phone),
       escapeCsv(l.email),
-      escapeCsv(l.ai_confidence_score || 90),
-      escapeCsv(l.scraping_mode || 'http'),
       escapeCsv(l.source_url)
     ];
     csvRows.push(row.join(','));

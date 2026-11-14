@@ -1,116 +1,122 @@
 import re
+import ipaddress
 from typing import Optional, Tuple, List
-import phonenumbers
-from phonenumbers import PhoneNumberFormat, NumberParseException
 
-# Regex pattern for Bangladesh mobile numbers:
-# Country code: +880 or 880 or 0
-# Operator prefix: 1 followed by 3-9 (13, 14, 15, 16, 17, 18, 19)
-# Subscriber number: 8 digits
-BD_MOBILE_REGEX = re.compile(r'^(?:\+?880|880|0)?(1[3-9]\d{8})$')
+# Valid BD mobile operator prefixes (without 0): 13, 14, 15, 16, 17, 18, 19
+# Note: 010, 011, 012 are invalid / reserved.
+BD_MOBILE_PREFIX_REGEX = re.compile(r'^1[3-9]\d{8}$')
 
-# Regex for BD Landline (Dhaka 02, etc. typically 6-9 subscriber digits):
-BD_LANDLINE_REGEX = re.compile(r'^(?:\+?880|880|0)?([2-9]\d{6,8})$')
-
-# Discard year ranges or copyright dates misparsed as phone numbers
+# Year ranges or copyright dates misparsed as phone numbers (e.g. 2024-2025)
 YEAR_RANGE_REGEX = re.compile(r'\b(?:19|20)\d{2}\s*[-–/]\s*(?:19|20)\d{2}\b')
 
-# Dummy numbers like all zeros or all identical digits
-DUMMY_DIGITS_REGEX = re.compile(r'^(\d)\1{6,}$')
+# Dummy numbers with repeating identical digits
+DUMMY_DIGITS_REGEX = re.compile(r'^(\d)\1{7,}$')
+
+def is_ip_address(val: str) -> bool:
+    """Detects IPv4 or IPv6 addresses to prevent them from being treated as phone numbers."""
+    cleaned = str(val).strip()
+    try:
+        ipaddress.ip_address(cleaned)
+        return True
+    except ValueError:
+        pass
+    # Dotted IPv4 pattern (e.g. 192.168.1.1, 8.8.8.8, 10.0.0.1:8080)
+    if re.match(r'^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}(?::\d+)?$', cleaned):
+        return True
+    # Colon-separated IPv6 pattern
+    if ':' in cleaned and re.search(r'[0-9a-fA-F]{1,4}:[0-9a-fA-F]{1,4}', cleaned):
+        return True
+    return False
 
 def clean_phone_input(raw_phone: str) -> str:
-    """Strips formatting symbols, spaces, parentheses, hyphens, and dots."""
+    """Strips formatting symbols, spaces, parentheses, hyphens, and slashes."""
     if not raw_phone:
         return ""
-    # Remove whitespace, hyphens, parentheses, dots
     cleaned = re.sub(r'[\s\-()./,]', '', str(raw_phone)).strip()
     return cleaned
 
 def normalize_bd_phone(raw_phone: str) -> Tuple[bool, Optional[str], Optional[str]]:
     """
-    Validates and normalizes a Bangladesh phone number.
+    Validates and normalizes a Bangladesh mobile phone number.
+    
+    Rules:
+    - Accepts ONLY valid Bangladesh mobile numbers in international format (+8801XXXXXXXXX).
+    - Valid mobile operator prefixes: 013, 014, 015, 016, 017, 018, 019.
+    - Rejects any number starting with 02 or +8802 (landline numbers).
+    - Rejects IP addresses (IPv4 and IPv6 like 192.168.1.1, 8.8.8.8).
+    - Rejects short codes, incomplete numbers, and invalid prefixes.
+    - Normalizes accepted numbers into '+8801XXXXXXXXX' format (14 characters).
+    
     Returns:
-        (is_valid: bool, normalized_phone: str or None, reason: str or None)
-        
-    All valid numbers are normalized to '+880XXXXXXXXXX'.
+        (is_valid: bool, normalized_phone: str or None, error_reason: str or None)
     """
     if not raw_phone or str(raw_phone).strip().lower() in ('n/a', 'none', 'null', ''):
         return False, None, "Phone number is empty or N/A"
 
     raw_str = str(raw_phone).strip()
 
-    # Reject year ranges (e.g. 2024-2025)
+    # 1. Reject IP addresses
+    if is_ip_address(raw_str):
+        return False, None, f"Rejected: '{raw_str}' is an IP address, not a phone number"
+
+    # 2. Reject date / year ranges
     if YEAR_RANGE_REGEX.search(raw_str):
-        return False, None, "Invalid phone number: appears to be a date or year range"
+        return False, None, "Rejected: appears to be a year range or date"
 
+    # 3. Clean formatting symbols
     cleaned = clean_phone_input(raw_str)
-    digits_only = re.sub(r'\D', '', cleaned)
 
-    if len(digits_only) < 7:
-        return False, None, f"Phone number too short ({len(digits_only)} digits)"
-    if len(digits_only) > 15:
-        return False, None, f"Phone number too long ({len(digits_only)} digits)"
+    # 4. Explicitly reject landline numbers starting with 02, +8802, or 8802
+    if cleaned.startswith(('02', '+8802', '8802', '+02')):
+        return False, None, f"Rejected: landline number '{raw_str}' (only mobile numbers allowed)"
 
-    # Reject dummy repeating digits
-    if DUMMY_DIGITS_REGEX.match(digits_only):
-        return False, None, "Invalid dummy phone number (repeating digits)"
+    # 5. Extract subscriber part by checking country code / national prefix
+    if cleaned.startswith('+880'):
+        subscriber = cleaned[4:]
+    elif cleaned.startswith('880'):
+        subscriber = cleaned[3:]
+    elif cleaned.startswith('0'):
+        subscriber = cleaned[1:]
+    else:
+        return False, None, "Rejected: missing valid Bangladesh country code or prefix (+880 / 01...)"
 
-    # 1. First priority: Check standard Bangladesh Mobile format
-    mobile_match = BD_MOBILE_REGEX.match(digits_only)
-    if mobile_match:
-        subscriber_part = mobile_match.group(1)  # 1[3-9]XXXXXXXX
-        normalized = f"+880{subscriber_part}"
-        return True, normalized, None
+    # 6. Reject non-digits or invalid length (must be exactly 10 digits starting with 1[3-9])
+    if not subscriber.isdigit():
+        return False, None, "Rejected: contains non-numeric characters"
 
-    # 2. Check standard Bangladesh Landline format
-    landline_match = BD_LANDLINE_REGEX.match(digits_only)
-    if landline_match:
-        subscriber_part = landline_match.group(1)
-        normalized = f"+880{subscriber_part}"
-        return True, normalized, None
+    if len(subscriber) != 10:
+        return False, None, f"Rejected: invalid length ({len(subscriber)} digits, expected 10 after +880)"
 
-    # 3. Use Google's phonenumbers library for edge-cases & official telecom compliance
-    try:
-        # Prepend + if not present for international parse attempt
-        cand_str = cleaned if cleaned.startswith('+') else f"+{cleaned}"
-        parsed = phonenumbers.parse(cand_str, "BD")
+    # 7. Check valid mobile operator prefix: 13, 14, 15, 16, 17, 18, 19
+    if not BD_MOBILE_PREFIX_REGEX.match(subscriber):
+        prefix = subscriber[:2]
+        return False, None, f"Rejected: invalid mobile operator prefix '0{prefix}' (must be 013-019)"
 
-        if phonenumbers.is_valid_number(parsed):
-            region = phonenumbers.region_code_for_number(parsed)
-            if region == "BD":
-                formatted = phonenumbers.format_number(parsed, PhoneNumberFormat.E164)
-                if formatted.startswith("+880"):
-                    return True, formatted, None
+    # 8. Reject dummy numbers with repeating digits (e.g. 00000000)
+    if DUMMY_DIGITS_REGEX.match(subscriber[2:]):
+        return False, None, "Rejected: dummy or placeholder repeating digits"
 
-        # Try parsing assuming local BD if international failed
-        parsed_local = phonenumbers.parse(cleaned, "BD")
-        if phonenumbers.is_valid_number(parsed_local):
-            region = phonenumbers.region_code_for_number(parsed_local)
-            if region == "BD":
-                formatted = phonenumbers.format_number(parsed_local, PhoneNumberFormat.E164)
-                if formatted.startswith("+880"):
-                    return True, formatted, None
-    except NumberParseException:
-        pass
-
-    return False, None, f"Not a valid Bangladesh phone number format: '{raw_str}'"
+    # 9. Successful normalization into +8801XXXXXXXXX
+    normalized = f"+880{subscriber}"
+    return True, normalized, None
 
 def is_valid_bd_phone(raw_phone: str) -> bool:
-    """Convenience boolean check for BD phone validity."""
+    """Convenience boolean check for BD mobile phone validity."""
     is_valid, _, _ = normalize_bd_phone(raw_phone)
     return is_valid
 
 def extract_and_normalize_bd_phones(text: str) -> List[str]:
     """
-    Extracts all candidate phone numbers from text/html and returns
-    a deduplicated list of strictly normalized '+880...' numbers.
+    Extracts all candidate mobile phone numbers from text/html and returns
+    a deduplicated list of strictly normalized '+8801XXXXXXXXX' numbers.
     """
     if not text:
         return []
 
-    # Regex search for possible phone chunks
+    # Regex search specifically for Bangladesh mobile number patterns (013-019)
+    # Avoids matching IP addresses or landlines
     candidates = re.findall(
-        r'(?:\+?880[\s.-]?)?0?1[3-9](?:[\s.-]?\d){8}\b|(?:\+?880[\s.-]?)?0?[2-9]\d{0,3}[\s.-]?\d{4,8}\b',
+        r'(?:\+?880[\s.-]?)?0?1[3-9](?:[\s.-]?\d){8}\b',
         text
     )
 

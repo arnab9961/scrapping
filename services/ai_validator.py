@@ -43,16 +43,13 @@ def rule_based_pre_validation(lead: Dict[str, Any]) -> Tuple[bool, str, list]:
     if not has_phone and not has_email:
         issues.append("Neither phone nor email is available")
 
-    # Validate Bangladesh phone format if phone is provided
+    # Validate Bangladesh mobile phone format if phone is provided
     if has_phone:
         is_val, norm_phone, err = normalize_bd_phone(phone)
-        if is_val:
+        if is_val and norm_phone:
             lead["phone"] = norm_phone
-        elif has_email:
-            # If phone formatting has minor landline/extension mismatch but valid email exists, keep phone and proceed to AI
-            lead["phone"] = phone
         else:
-            issues.append(f"Invalid Bangladesh phone number format: {err}")
+            issues.append(f"Invalid Bangladesh mobile phone: {err}")
 
     if issues:
         return False, "; ".join(issues), issues
@@ -126,9 +123,10 @@ def validate_lead_with_ai(lead: Dict[str, Any], target_industry: str = "Hospital
         "  Banking & Finance, Corporate Enterprises, IT, Telecom, Garments, Travel, Associations, Government, and Commercial businesses.\n"
         "- Any legitimate business entity, company, financial institution, director, manager, or executive with verifiable\n"
         "  contact info (phone, email, or role) is a VALUABLE and RELEVANT corporate lead.\n\n"
-        "BANGLADESH PHONE RULES:\n"
-        "- Standard mobile numbers (+8801XXXXXXXXX) AND landline numbers (+8802XXXXXXX for Dhaka, +88031XXXXXX for Chittagong, etc.)\n"
-        "  are 100% valid Bangladesh numbers. Any phone starting with +880 is a legitimate format.\n\n"
+        "BANGLADESH MOBILE PHONE RULES:\n"
+        "- Only valid Bangladesh mobile phone numbers in international format (+8801XXXXXXXXX) are acceptable.\n"
+        "- Valid mobile operator prefixes are 013, 014, 015, 016, 017, 018, 019.\n"
+        "- Any number starting with 02 or +8802 (landlines), IP addresses (e.g. 192.168.1.1), short codes, or incomplete numbers must be REJECTED.\n\n"
         "Evaluation criteria:\n"
         "1. Is this a real business, organization, or corporate decision-maker?\n"
         "2. Does it represent a legitimate business, association, or commercial prospect?\n"

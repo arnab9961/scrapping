@@ -101,59 +101,62 @@ def decode_bing_url(bing_ck_url: str) -> str:
         pass
     return bing_ck_url
 
-def search_via_serpapi(query: str, max_results: int = 10) -> List[Dict[str, str]]:
-    """Searches Google via official SerpAPI."""
-    try:
-        respect_rate_limit()
-        params = {
-            "engine": "google",
-            "q": query,
-            "api_key": config.SERPAPI_API_KEY,
-            "num": max_results
-        }
-        with httpx.Client(timeout=15.0) as client:
-            resp = client.get("https://serpapi.com/search.json", params=params)
-            if resp.status_code == 200:
-                data = resp.json()
-                return [
-                    {
-                        "title": item.get("title", ""),
-                        "url": item.get("link", ""),
-                        "snippet": item.get("snippet", "")
-                    }
-                    for item in data.get("organic_results", [])[:max_results]
-                ]
-    except Exception as e:
-        print(f"⚠️ SerpAPI error: {e}")
-    return []
+def search_via_brave(query: str, max_results: int = 20) -> List[Dict[str, str]]:
+    """
+    Searches via official Brave Search API as the primary lead discovery provider.
+    Handles rate limits, timeouts, and empty search results gracefully.
+    """
+    if not config.has_brave_credentials():
+        print("⚠️ Brave Search API key is not configured in environment.")
+        return []
 
-def search_via_brave(query: str, max_results: int = 10) -> List[Dict[str, str]]:
-    """Searches via official Brave Search API."""
     try:
         respect_rate_limit()
         headers = {
             "Accept": "application/json",
+            "Accept-Encoding": "gzip",
             "X-Subscription-Token": config.BRAVE_SEARCH_API_KEY
         }
-        params = {"q": query, "count": max_results}
+        # Brave Search API max count per request is 20
+        count = min(max(1, max_results), 20)
+        params = {
+            "q": query,
+            "count": count,
+            "text_decorations": False,
+            "search_lang": "en"
+        }
         with httpx.Client(timeout=15.0, headers=headers) as client:
             resp = client.get("https://api.search.brave.com/res/v1/web/search", params=params)
             if resp.status_code == 200:
                 data = resp.json()
-                return [
-                    {
-                        "title": item.get("title", ""),
-                        "url": item.get("url", ""),
-                        "snippet": item.get("description", "")
-                    }
-                    for item in data.get("web", {}).get("results", [])[:max_results]
-                ]
+                results = []
+                web_results = data.get("web", {}).get("results", [])
+                for item in web_results[:count]:
+                    url = item.get("url", "").strip()
+                    title = clean_text(item.get("title", ""))
+                    snippet = clean_text(item.get("description", ""))
+                    if url and not is_skippable_url(url):
+                        results.append({
+                            "title": title,
+                            "url": url,
+                            "snippet": snippet
+                        })
+                print(f"✅ Brave Search discovered {len(results)} candidate URLs for: '{query}'")
+                return results
+            elif resp.status_code == 429:
+                print(f"⚠️ Brave Search rate limit reached (HTTP 429) for '{query}'")
+            elif resp.status_code in (401, 403):
+                print(f"❌ Brave Search API authentication failed (HTTP {resp.status_code}): Check BRAVE_SEARCH_API_KEY")
+            else:
+                print(f"⚠️ Brave Search API returned HTTP {resp.status_code}: {resp.text[:150]}")
+    except httpx.TimeoutException:
+        print(f"⚠️ Brave Search request timed out for query: '{query}'")
     except Exception as e:
-        print(f"⚠️ Brave Search error: {e}")
+        print(f"❌ Brave Search exception for query '{query}': {e}")
     return []
 
 def search_fallback(query: str, max_results: int = 25) -> List[Dict[str, str]]:
-    """Polite search combining DuckDuckGo HTML & Scrapling Fetcher."""
+    """Polite fallback search combining DuckDuckGo HTML & Scrapling Fetcher."""
     respect_rate_limit()
     results = []
     seen_urls = set()
@@ -228,16 +231,20 @@ def search_fallback(query: str, max_results: int = 25) -> List[Dict[str, str]]:
     return results
 
 def web_search(query: str, max_results: int = 25) -> List[Dict[str, str]]:
-    """Universal search query dispatcher."""
-    print(f"\n🔎 [Tool: web_search] '{query}' (up to {max_results} results)")
-    if config.has_serpapi_credentials():
-        res = search_via_serpapi(query, max_results)
-        if res:
-            return res
+    """
+    Primary search query dispatcher.
+    Brave Search API is the primary discovery provider.
+    Falls back gracefully if Brave is unavailable or rate-limited.
+    """
+    print(f"\n🦁 [Brave Discovery] Query: '{query}' (Target: up to {max_results} results)")
     if config.has_brave_credentials():
         res = search_via_brave(query, max_results)
         if res:
             return res
+        print("⚠️ Brave Search returned no results or rate-limited; attempting polite fallback...")
+    else:
+        print("⚠️ BRAVE_SEARCH_API_KEY not configured; using fallback search...")
+
     return search_fallback(query, max_results)
 
 def extract_pagination_links(html: str, base_url: str, max_links: int = 15) -> List[str]:

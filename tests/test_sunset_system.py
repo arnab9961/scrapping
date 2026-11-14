@@ -47,7 +47,7 @@ def test_bangladesh_phone_normalization_valid():
         ("01412345678", "+8801412345678"),
         ("01512345678", "+8801512345678"),
         ("01612345678", "+8801612345678"),
-        ("02-9530427", "+88029530427"),
+        ("01799887766", "+8801799887766"),
     ]
     for raw, expected in cases:
         is_val, normalized, err = normalize_bd_phone(raw)
@@ -57,6 +57,14 @@ def test_bangladesh_phone_normalization_valid():
 def test_bangladesh_phone_rejection_invalid():
     invalid_cases = [
         "12345",              # too short
+        "02-9530427",         # landline starting with 02
+        "0212345678",         # landline starting with 02
+        "+88029530427",       # landline starting with 02
+        "192.168.1.1",        # IPv4 address
+        "8.8.8.8",            # IPv4 address
+        "10.0.0.1",           # IPv4 address
+        "01012345678",        # invalid operator 010
+        "01112345678",        # invalid operator 011
         "01212345678",        # invalid operator 012
         "017123456",          # 9 digits instead of 11
         "01712345678999",     # too long
@@ -73,10 +81,11 @@ def test_bangladesh_phone_rejection_invalid():
         assert is_val is False, f"Expected {raw} to be rejected, but passed as {normalized}"
 
 def test_extract_and_normalize_bd_phones():
-    text = "Call Md. Karim at 01712345678 or office line 02-9530427. Copyright 2024-2026."
+    text = "Call Md. Karim at 01712345678 or 01899887766. Office landline 02-9530427 and IP 192.168.1.1 should be rejected. Copyright 2024-2026."
     extracted = extract_and_normalize_bd_phones(text)
     assert "+8801712345678" in extracted
-    assert "+88029530427" in extracted
+    assert "+8801899887766" in extracted
+    assert "+88029530427" not in extracted
     assert len(extracted) == 2
 
 # 2. SSRF Protection & URL Validation Tests
@@ -329,4 +338,16 @@ def test_fastapi_routes():
     res_ssrf = client.post("/api/scrape-url", json={"url": "http://127.0.0.1:8000/internal"})
     assert res_ssrf.status_code == 400
     assert "Invalid URL" in res_ssrf.json()["detail"]
+
+# 8. Brave Search Provider Primary Lead Discovery Test
+def test_brave_search_provider_discovery():
+    from tools import web_search, search_via_brave
+    results = search_via_brave("Sunset Kuakata Hotel Resort Bangladesh", max_results=3)
+    assert isinstance(results, list)
+    assert len(results) > 0
+    first = results[0]
+    assert "title" in first
+    assert "url" in first
+    assert first["url"].startswith("http")
+
 

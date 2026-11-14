@@ -14,7 +14,6 @@ const statQualified = document.getElementById('statQualified');
 const statRejected = document.getElementById('statRejected');
 const statDuplicates = document.getElementById('statDuplicates');
 const statAiRate = document.getElementById('statAiRate');
-const statModes = document.getElementById('statModes');
 const statJobs = document.getElementById('statJobs');
 const refreshStatsBtn = document.getElementById('refreshStatsBtn');
 
@@ -115,7 +114,6 @@ async function fetchDashboardMetrics() {
     statRejected.textContent = Number(stats.rejected_leads || 0).toLocaleString();
     statDuplicates.textContent = Number(stats.duplicate_leads || 0).toLocaleString();
     statAiRate.textContent = `${stats.ai_validation_rate || 0}%`;
-    statModes.textContent = `${stats.http_scraping_count || 0} / ${stats.playwright_scraping_count || 0}`;
     statJobs.textContent = `${stats.current_scraping_jobs || 0} / ${stats.failed_scraping_jobs || 0}`;
 
     qualifiedCountBadge.textContent = stats.qualified_leads || 0;
@@ -128,7 +126,7 @@ async function fetchDashboardMetrics() {
 // Fetch Qualified Leads
 async function loadQualifiedLeads() {
   try {
-    dashLeadsTableBody.innerHTML = `<tr><td colspan="12" style="text-align: center; padding: 24px; color: var(--text-muted);">Loading qualified leads...</td></tr>`;
+    dashLeadsTableBody.innerHTML = `<tr><td colspan="10" style="text-align: center; padding: 24px; color: var(--text-muted);">Loading qualified leads...</td></tr>`;
 
     const url = `/api/leads?page=${currentPage}&page_size=25&search=${encodeURIComponent(currentSearch)}&sort_by=${currentSortBy}&sort_order=${currentSortOrder}`;
     const res = await fetch(url);
@@ -147,23 +145,19 @@ async function loadQualifiedLeads() {
 
     renderLeadsTable(currentLeads);
   } catch (err) {
-    dashLeadsTableBody.innerHTML = `<tr><td colspan="12" style="text-align: center; padding: 24px; color: var(--danger);">Failed to load leads.</td></tr>`;
+    dashLeadsTableBody.innerHTML = `<tr><td colspan="10" style="text-align: center; padding: 24px; color: var(--danger);">Failed to load leads.</td></tr>`;
   }
 }
 
 function renderLeadsTable(leads) {
   dashLeadsTableBody.innerHTML = '';
   if (!leads || leads.length === 0) {
-    dashLeadsTableBody.innerHTML = `<tr><td colspan="12" style="text-align: center; padding: 32px; color: var(--text-muted);">No qualified leads found. Try searching or scraping new leads!</td></tr>`;
+    dashLeadsTableBody.innerHTML = `<tr><td colspan="10" style="text-align: center; padding: 32px; color: var(--text-muted);">No qualified leads found. Try searching or scraping new leads!</td></tr>`;
     return;
   }
 
   leads.forEach(l => {
     const tr = document.createElement('tr');
-    const score = l.ai_confidence_score || 90;
-    const scoreClass = score >= 85 ? 'badge-score-high' : (score >= 60 ? 'badge-score-mid' : 'badge-score-low');
-    const modeClass = l.scraping_mode === 'playwright' ? 'badge-mode-playwright' : 'badge-mode-http';
-    const modeLabel = l.scraping_mode === 'playwright' ? '⚡ Playwright' : '🌐 HTTP';
     const dateFormatted = l.created_at ? l.created_at.slice(0, 16) : 'N/A';
 
     tr.innerHTML = `
@@ -175,8 +169,6 @@ function renderLeadsTable(leads) {
       <td>${renderPhone(l.phone)}</td>
       <td>${renderEmail(l.email)}</td>
       <td>${escapeHtml(l.city || 'Dhaka')}</td>
-      <td><span class="badge-score ${scoreClass}" title="${escapeHtml(l.ai_validation_reason || '')}">AI: ${score}%</span></td>
-      <td><span class="badge-mode ${modeClass}">${modeLabel}</span></td>
       <td><small style="color: var(--text-muted);">${dateFormatted}</small></td>
       <td>${renderLink(l.source_url || l.website, 'Link')}</td>
     `;
@@ -313,7 +305,7 @@ dashExportCsvBtn.addEventListener('click', () => {
     return;
   }
 
-  const headers = ['ID', 'Business Name', 'Contact Person', 'Designation', 'Industry', 'Phone', 'Email', 'City', 'AI Confidence', 'Scraping Mode', 'Source URL', 'Date'];
+  const headers = ['ID', 'Business Name', 'Contact Person', 'Designation', 'Industry', 'Phone', 'Email', 'City', 'Source URL', 'Date'];
   const csvRows = [headers.join(',')];
 
   currentLeads.forEach(l => {
@@ -326,8 +318,6 @@ dashExportCsvBtn.addEventListener('click', () => {
       escapeCsv(l.phone),
       escapeCsv(l.email),
       escapeCsv(l.city),
-      escapeCsv(l.ai_confidence_score),
-      escapeCsv(l.scraping_mode),
       escapeCsv(l.source_url),
       escapeCsv(l.created_at)
     ];
