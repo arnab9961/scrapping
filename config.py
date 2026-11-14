@@ -1,0 +1,62 @@
+import os
+from pathlib import Path
+from dotenv import load_dotenv
+
+# Workspace root and .env path
+BASE_DIR = Path(__file__).resolve().parent
+ENV_PATH = BASE_DIR / ".env"
+load_dotenv(dotenv_path=ENV_PATH)
+
+# Groq Cloud Configuration (Primary AI Validation Engine)
+GROQ_CLOUD_API_KEY = (
+    os.getenv("GROQ_CLOUD_API_KEY") or
+    os.getenv("Groq_cloud_api_key") or
+    ""
+).strip()
+
+MODEL_NAME = (
+    os.getenv("MODEL_NAME") or
+    os.getenv("Model_name") or
+    "openai/gpt-oss-120b"
+).strip()
+
+GROQ_BASE_URL = os.getenv("GROQ_BASE_URL", "https://api.groq.com/openai/v1").strip()
+
+# Legacy / Secondary OpenAI Config
+OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "").strip()
+LLM_BASE_URL = os.getenv("LLM_BASE_URL", "https://api.openai.com/v1").strip()
+LLM_MODEL = os.getenv("LLM_MODEL", "gpt-4o-mini").strip()
+
+# Search API Configurations (Optional)
+SERPAPI_API_KEY = os.getenv("SERPAPI_API_KEY", "").strip()
+BRAVE_SEARCH_API_KEY = os.getenv("BRAVE_SEARCH_API_KEY", "").strip()
+
+# Scraper & Crawler Settings
+DEFAULT_USER_AGENT = os.getenv(
+    "DEFAULT_USER_AGENT",
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
+).strip()
+
+RATE_LIMIT_DELAY = float(os.getenv("RATE_LIMIT_DELAY_SECONDS", "1.0"))
+MAX_AGENT_ITERATIONS = int(os.getenv("MAX_AGENT_ITERATIONS", "10"))
+HTTP_TIMEOUT_SECONDS = float(os.getenv("HTTP_TIMEOUT_SECONDS", "10.0"))
+PLAYWRIGHT_TIMEOUT_MS = int(os.getenv("PLAYWRIGHT_TIMEOUT_MS", "15000"))
+
+# Database Configuration
+DATA_DIR = BASE_DIR / "data"
+DATA_DIR.mkdir(exist_ok=True)
+DB_PATH = DATA_DIR / "sunset_leads.db"
+
+def has_groq_credentials() -> bool:
+    """Returns True if Groq API key is present."""
+    return bool(GROQ_CLOUD_API_KEY)
+
+def has_llm_credentials() -> bool:
+    """Returns True if any LLM credentials exist."""
+    return bool(GROQ_CLOUD_API_KEY or OPENAI_API_KEY)
+
+def has_serpapi_credentials() -> bool:
+    return bool(SERPAPI_API_KEY)
+
+def has_brave_credentials() -> bool:
+    return bool(BRAVE_SEARCH_API_KEY)

@@ -110,3 +110,8 @@ output/*/index.html
 docs/_build
 public/
 web/
+
+# Sunset Group Leads Application
+data/
+*.csv
+

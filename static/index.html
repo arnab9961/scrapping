@@ -1,0 +1,215 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Sunset Group • Lead Scraping & AI Validation System</title>
+  <link rel="stylesheet" href="/static/style.css" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+</head>
+<body>
+  <div class="app-container">
+    <!-- Header with Sunset Group Logo -->
+    <header class="header">
+      <div class="logo-area">
+        <img src="/static/Sunset-Group-Logo.png" alt="Sunset Group Logo" class="brand-logo" />
+        <div>
+          <h1 class="brand-title">Sunset Group</h1>
+          <p class="subtitle">Lead Scraping & AI Validation System • Kuakata Hotel & Resort</p>
+        </div>
+      </div>
+      <div class="header-right">
+        <div id="statusBadge" class="status-badge">
+          <span class="dot"></span> Ready
+        </div>
+      </div>
+    </header>
+
+    <!-- Navigation Tabs -->
+    <nav class="nav-tabs">
+      <a href="/" class="nav-tab active">🔍 Search Leads</a>
+      <a href="/url-scraper" class="nav-tab">🔗 Direct URL Scraper</a>
+      <a href="/dashboard" class="nav-tab">📊 Scraping Dashboard</a>
+    </nav>
+
+    <!-- Search Form Card -->
+    <div class="card search-card">
+      <form id="searchForm" class="search-form">
+        <!-- Target Role / Category -->
+        <div class="input-group col-span-8">
+          <label for="categoryInput">Target Industry / Profession / Role</label>
+          <input
+            type="text"
+            id="categoryInput"
+            placeholder="e.g. Tour Managers, Travel Agencies, Corporate HR Heads, Event Planners"
+            required
+            autocomplete="off"
+          />
+        </div>
+
+        <!-- Target Goal -->
+        <div class="input-group col-span-4">
+          <label for="targetGoalInput">Lead Target Goal</label>
+          <select id="targetGoalInput" class="select-input">
+            <option value="50" selected>⚡ 50 Leads (Fast AI Validation)</option>
+            <option value="100">📋 100 Leads</option>
+            <option value="250">🔍 250 Leads</option>
+            <option value="500">🔥 500 Leads (Deep Harvest)</option>
+          </select>
+        </div>
+
+        <!-- Country -->
+        <div class="input-group col-span-3">
+          <label for="countryInput">Country</label>
+          <input
+            type="text"
+            id="countryInput"
+            value="Bangladesh"
+            placeholder="e.g. Bangladesh"
+            required
+            autocomplete="off"
+          />
+        </div>
+
+        <!-- City -->
+        <div class="input-group col-span-3">
+          <label for="cityInput">City / District</label>
+          <input
+            type="text"
+            id="cityInput"
+            value="Dhaka"
+            placeholder="e.g. Dhaka, Barishal, Khulna, Chittagong"
+            required
+            autocomplete="off"
+          />
+        </div>
+
+        <!-- Area -->
+        <div class="input-group col-span-3">
+          <label for="areaInput">Area / Neighborhood (Optional)</label>
+          <input
+            type="text"
+            id="areaInput"
+            placeholder="e.g. Gulshan, Banani, Motijheel, Uttara"
+            autocomplete="off"
+          />
+        </div>
+
+        <!-- Search Action Buttons -->
+        <div class="col-span-3" style="display: flex; gap: 8px;">
+          <button type="submit" id="searchBtn" class="btn btn-primary" style="flex: 1;">
+            <span class="btn-text">Find Leads</span>
+            <span class="spinner" style="display: none;"></span>
+          </button>
+          <button type="button" id="stopBtn" class="btn btn-secondary" style="display: none;">
+            ⏹️ Stop
+          </button>
+        </div>
+      </form>
+
+      <!-- Target Presets -->
+      <div class="presets">
+        <span class="presets-label">Popular Targets:</span>
+        <button type="button" class="preset-tag" data-cat="Tour Operators & Travel Agencies" data-city="Dhaka" data-area="Gulshan">🎒 Tour Operators (Gulshan)</button>
+        <button type="button" class="preset-tag" data-cat="Travel Agency Owners & MDs" data-city="Dhaka" data-area="Motijheel">✈️ Agency Owners (Motijheel)</button>
+        <button type="button" class="preset-tag" data-cat="Corporate HR & Admin Heads" data-city="Dhaka" data-area="Banani">👔 Corporate HR (Banani)</button>
+        <button type="button" class="preset-tag" data-cat="Event & Conference Planners" data-city="Barishal" data-area="">🎪 Event Planners (Barishal)</button>
+      </div>
+    </div>
+
+    <!-- Active Loading State -->
+    <div id="loadingState" class="card loading-card" style="display: none;">
+      <div class="loading-spinner"></div>
+      <div class="live-counter-badge" id="liveCounterBadge">0 Qualified Leads</div>
+      <h3 id="loadingTitle">Scraping & AI-Validating Leads...</h3>
+      <p id="loadingSubtitle" style="color: var(--text-secondary); font-size: 13px;">Connecting to directories, extracting decision-makers, and running Groq AI validation.</p>
+      <div class="progress-bar">
+        <div class="progress-bar-fill"></div>
+      </div>
+      <button type="button" id="stopStreamBtn" class="btn btn-secondary" style="margin-top: 12px;">
+        ⏹️ Stop & Keep Harvested Leads
+      </button>
+    </div>
+
+    <!-- Error State -->
+    <div id="errorState" class="card error-card" style="display: none;">
+      <div style="font-size: 28px;">⚠️</div>
+      <div style="flex: 1;">
+        <h3 id="errorTitle" style="color: #991b1b; font-size: 15px;">Search Error</h3>
+        <p id="errorMessage" style="color: #b91c1c; font-size: 13px;">An unexpected error occurred.</p>
+      </div>
+      <button type="button" id="dismissErrorBtn" class="btn btn-secondary">Dismiss</button>
+    </div>
+
+    <!-- Empty State -->
+    <div id="emptyState" class="card empty-card" style="display: none;">
+      <div style="font-size: 36px; margin-bottom: 8px;">🔍</div>
+      <h3>No Leads Found</h3>
+      <p>No valid prospects passed rule and AI validation for this query. Try broader keywords or a different district.</p>
+    </div>
+
+    <!-- Results Section -->
+    <section id="resultsSection" style="display: none; flex-direction: column; gap: 16px;">
+      <!-- Results Bar -->
+      <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px;">
+        <div>
+          <h2 id="resultsCount" style="font-size: 18px; font-weight: 700;">0 Qualified Leads</h2>
+          <div style="display: flex; gap: 8px; margin-top: 4px;">
+            <span class="badge-tag" id="phoneCountPill">📞 0 phone</span>
+            <span class="badge-tag" id="emailCountPill">📧 0 email</span>
+            <span class="badge-tag" id="aiPassPill">🤖 Groq AI Validated</span>
+          </div>
+        </div>
+
+        <div style="display: flex; gap: 8px; align-items: center;">
+          <input
+            type="text"
+            id="filterInput"
+            class="filter-input"
+            placeholder="Filter current results..."
+            style="width: 200px;"
+          />
+          <button type="button" id="copyAllBtn" class="btn btn-secondary">
+            📋 Copy All
+          </button>
+          <button type="button" id="exportCsvBtn" class="btn btn-success">
+            💾 Export CSV
+          </button>
+        </div>
+      </div>
+
+      <!-- Leads Table -->
+      <div class="table-container">
+        <table class="leads-table">
+          <thead>
+            <tr>
+              <th>#</th>
+              <th>Business / Organization</th>
+              <th>Contact Person</th>
+              <th>Designation</th>
+              <th>Phone (+880)</th>
+              <th>Email</th>
+              <th>Location</th>
+              <th>AI Score</th>
+              <th>Mode</th>
+              <th>Source</th>
+            </tr>
+          </thead>
+          <tbody id="leadsTableBody">
+            <!-- Dynamically populated rows in real-time -->
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- Footer -->
+    <footer class="footer">
+      <p>© Sunset Group • Sunset Kuakata Hotel & Resort Lead Generation System</p>
+    </footer>
+  </div>
+
+  <script src="/static/app.js"></script>
+</body>
+</html>

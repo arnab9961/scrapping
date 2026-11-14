@@ -1,0 +1,223 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Scraping Dashboard • Sunset Group</title>
+  <link rel="stylesheet" href="/static/style.css" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+</head>
+<body>
+  <div class="app-container">
+    <!-- Header with Sunset Group Logo -->
+    <header class="header">
+      <div class="logo-area">
+        <img src="/static/Sunset-Group-Logo.png" alt="Sunset Group Logo" class="brand-logo" />
+        <div>
+          <h1 class="brand-title">Sunset Group</h1>
+          <p class="subtitle">Scraping Analytics & AI Validation Dashboard</p>
+        </div>
+      </div>
+      <div class="header-right">
+        <button id="refreshStatsBtn" class="btn btn-secondary" style="height: 38px; font-size: 13px;">
+          🔄 Refresh Metrics
+        </button>
+      </div>
+    </header>
+
+    <!-- Navigation Tabs -->
+    <nav class="nav-tabs">
+      <a href="/" class="nav-tab">🔍 Search Leads</a>
+      <a href="/url-scraper" class="nav-tab">🔗 Direct URL Scraper</a>
+      <a href="/dashboard" class="nav-tab active">📊 Scraping Dashboard</a>
+    </nav>
+
+    <!-- Metrics Overview Grid -->
+    <div class="stats-grid">
+      <div class="stat-card">
+        <span class="stat-label">👥 Total Scraped</span>
+        <span id="statTotalScraped" class="stat-value">0</span>
+        <span class="stat-sub">Discovered business prospects</span>
+      </div>
+
+      <div class="stat-card" style="border-left: 4px solid var(--success);">
+        <span class="stat-label">✅ Qualified Leads</span>
+        <span id="statQualified" class="stat-value" style="color: var(--success);">0</span>
+        <span class="stat-sub">Passed rules & AI confidence</span>
+      </div>
+
+      <div class="stat-card" style="border-left: 4px solid var(--danger);">
+        <span class="stat-label">🚫 Rejected Leads</span>
+        <span id="statRejected" class="stat-value" style="color: var(--danger);">0</span>
+        <span class="stat-sub">Failed validation or malformed</span>
+      </div>
+
+      <div class="stat-card">
+        <span class="stat-label">🔁 Duplicate Leads</span>
+        <span id="statDuplicates" class="stat-value">0</span>
+        <span class="stat-sub">Deduplicated across channels</span>
+      </div>
+
+      <div class="stat-card" style="border-left: 4px solid var(--primary);">
+        <span class="stat-label">🤖 AI Validation Rate</span>
+        <span id="statAiRate" class="stat-value" style="color: var(--primary);">0%</span>
+        <span class="stat-sub">Groq AI qualification ratio</span>
+      </div>
+
+      <div class="stat-card">
+        <span class="stat-label">🌐 HTTP vs ⚡ Playwright</span>
+        <span id="statModes" class="stat-value" style="font-size: 20px;">0 / 0</span>
+        <span class="stat-sub">Scraping modes utilized</span>
+      </div>
+
+      <div class="stat-card">
+        <span class="stat-label">⚙️ Active / Failed Jobs</span>
+        <span id="statJobs" class="stat-value" style="font-size: 20px;">0 / 0</span>
+        <span class="stat-sub">Current job execution health</span>
+      </div>
+    </div>
+
+    <!-- Dashboard Content Section -->
+    <div class="card" style="padding: 0; overflow: hidden;">
+      <!-- Sub-Tabs -->
+      <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid var(--border-color); padding: 12px 20px; background: #f8fafc; flex-wrap: wrap; gap: 12px;">
+        <div style="display: flex; gap: 8px;">
+          <button id="tabQualifiedBtn" class="btn btn-secondary active-subtab" style="height: 36px; font-size: 13px;">
+            ✅ Qualified Leads (<span id="qualifiedCountBadge">0</span>)
+          </button>
+          <button id="tabRejectedBtn" class="btn btn-secondary" style="height: 36px; font-size: 13px;">
+            ⚠️ Rejection Log (<span id="rejectedCountBadge">0</span>)
+          </button>
+          <button id="tabJobsBtn" class="btn btn-secondary" style="height: 36px; font-size: 13px;">
+            ⏱️ Recent Jobs (<span id="jobsCountBadge">0</span>)
+          </button>
+        </div>
+
+        <!-- Filter & Search Controls -->
+        <div id="leadsControls" style="display: flex; gap: 8px; align-items: center;">
+          <input
+            type="text"
+            id="dashSearchInput"
+            placeholder="Search business, name, phone, city..."
+            class="filter-input"
+            style="width: 260px; height: 38px; font-size: 13px;"
+          />
+          <select id="dashSortSelect" class="select-input" style="width: 170px; height: 38px; font-size: 13px; padding: 0 10px;">
+            <option value="created_at:desc" selected>📅 Newest First</option>
+            <option value="ai_confidence_score:desc">🔥 Highest AI Score</option>
+            <option value="business_name:asc">🔤 Business (A-Z)</option>
+          </select>
+          <button id="dashExportCsvBtn" class="btn btn-success" style="height: 38px; font-size: 13px; padding: 0 16px;">
+            💾 Export CSV
+          </button>
+        </div>
+      </div>
+
+      <!-- Qualified Leads View -->
+      <div id="qualifiedLeadsView">
+        <div class="table-container" style="border: none; border-radius: 0;">
+          <table class="leads-table">
+            <thead>
+              <tr>
+                <th>#ID</th>
+                <th>Business Name</th>
+                <th>Contact Person</th>
+                <th>Designation</th>
+                <th>Industry</th>
+                <th>Phone (+880)</th>
+                <th>Email</th>
+                <th>City</th>
+                <th>AI Score</th>
+                <th>Mode</th>
+                <th>Date</th>
+                <th>Source</th>
+              </tr>
+            </thead>
+            <tbody id="dashLeadsTableBody">
+              <!-- Dynamically populated rows -->
+            </tbody>
+          </table>
+        </div>
+
+        <!-- Pagination Bar -->
+        <div class="pagination-controls">
+          <div style="font-size: 13px; color: var(--text-secondary);">
+            Showing page <span id="currentPageNum">1</span> of <span id="totalPagesNum">1</span> (<span id="totalLeadsCount">0</span> total leads)
+          </div>
+          <div style="display: flex; gap: 8px;">
+            <button id="prevPageBtn" class="page-btn" disabled>← Previous</button>
+            <button id="nextPageBtn" class="page-btn" disabled>Next →</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Rejected Leads View (Hidden by default) -->
+      <div id="rejectedLeadsView" style="display: none;">
+        <div class="table-container" style="border: none; border-radius: 0;">
+          <table class="leads-table">
+            <thead>
+              <tr>
+                <th>#ID</th>
+                <th>Business / Name</th>
+                <th>Phone</th>
+                <th>Email</th>
+                <th>Stage</th>
+                <th>Rejection Reason</th>
+                <th>Issues</th>
+                <th>Date</th>
+              </tr>
+            </thead>
+            <tbody id="dashRejectedTableBody">
+              <!-- Populated dynamically -->
+            </tbody>
+          </table>
+        </div>
+        <div class="pagination-controls">
+          <div style="font-size: 13px; color: var(--text-secondary);">
+            Rejected leads audit trail (Total: <span id="totalRejectedCount">0</span>)
+          </div>
+          <div style="display: flex; gap: 8px;">
+            <button id="prevRejectedBtn" class="page-btn" disabled>← Previous</button>
+            <button id="nextRejectedBtn" class="page-btn" disabled>Next →</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Jobs View (Hidden by default) -->
+      <div id="jobsView" style="display: none;">
+        <div class="table-container" style="border: none; border-radius: 0;">
+          <table class="leads-table">
+            <thead>
+              <tr>
+                <th>Job ID</th>
+                <th>Type</th>
+                <th>Target / Query</th>
+                <th>Status</th>
+                <th>Scraped</th>
+                <th>Qualified</th>
+                <th>Rejected</th>
+                <th>Duplicates</th>
+                <th>HTTP / Playwright</th>
+                <th>Started</th>
+              </tr>
+            </thead>
+            <tbody id="dashJobsTableBody">
+              <!-- Populated dynamically -->
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- Footer -->
+    <footer class="footer">
+      <p>© Sunset Group • Lead Scraping & AI Validation Dashboard</p>
+    </footer>
+  </div>
+
+  <script src="/static/dashboard.js"></script>
+</body>
+</html>
+

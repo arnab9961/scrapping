@@ -1,0 +1,182 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Direct URL Scraper • Sunset Group</title>
+  <link rel="stylesheet" href="/static/style.css" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+</head>
+<body>
+  <div class="app-container">
+    <!-- Header with Sunset Group Logo -->
+    <header class="header">
+      <div class="logo-area">
+        <img src="/static/Sunset-Group-Logo.png" alt="Sunset Group Logo" class="brand-logo" />
+        <div>
+          <h1 class="brand-title">Sunset Group</h1>
+          <p class="subtitle">Direct URL Scraper & AI Validation • Dual-Mode HTTP & Playwright</p>
+        </div>
+      </div>
+      <div class="header-right">
+        <div id="statusBadge" class="status-badge">
+          <span class="dot"></span> Ready
+        </div>
+      </div>
+    </header>
+
+    <!-- Navigation Tabs -->
+    <nav class="nav-tabs">
+      <a href="/" class="nav-tab">🔍 Search Leads</a>
+      <a href="/url-scraper" class="nav-tab active">🔗 Direct URL Scraper</a>
+      <a href="/dashboard" class="nav-tab">📊 Scraping Dashboard</a>
+    </nav>
+
+    <!-- URL Scraper Input Card -->
+    <div class="card search-card">
+      <form id="urlScrapeForm" class="search-form">
+        <!-- Target Webpage URL -->
+        <div class="input-group col-span-12">
+          <label for="urlInput">Target Webpage / Directory URL (Public HTTP/HTTPS only)</label>
+          <input
+            type="url"
+            id="urlInput"
+            placeholder="e.g. https://www.bb.org.bd/en/index.php/about/executives or https://bdyellowpages.net/"
+            required
+            autocomplete="off"
+          />
+        </div>
+
+        <!-- Options: Pagination & Max Pages -->
+        <div class="input-group col-span-4" style="justify-content: center;">
+          <label style="display: flex; align-items: center; gap: 8px; cursor: pointer; font-size: 13px; font-weight: 500;">
+            <input type="checkbox" id="crawlPagination" checked style="width: 18px; height: 18px; accent-color: var(--primary);" />
+            <span>Follow directory pagination (sub-pages)</span>
+          </label>
+        </div>
+
+        <div class="input-group col-span-4">
+          <label for="maxPagesInput">Max Sub-Pages to Crawl</label>
+          <select id="maxPagesInput" class="select-input">
+            <option value="5" selected>⚡ Up to 5 Sub-Pages (Fast)</option>
+            <option value="10">📋 Up to 10 Sub-Pages</option>
+            <option value="25">🔥 Up to 25 Sub-Pages</option>
+            <option value="0">📄 Single Page Only (No Pagination)</option>
+          </select>
+        </div>
+
+        <div class="col-span-4" style="display: flex; gap: 8px;">
+          <button type="submit" id="scrapeBtn" class="btn btn-primary" style="flex: 1;">
+            <span class="btn-text">🚀 Scrape & Validate Leads</span>
+            <span class="spinner" style="display: none;"></span>
+          </button>
+          <button type="button" id="stopBtn" class="btn btn-secondary" style="display: none;">
+            ⏹️ Stop
+          </button>
+        </div>
+      </form>
+
+      <!-- Preset Suggestions -->
+      <div class="presets">
+        <span class="presets-label">Preset Directories:</span>
+        <button type="button" class="preset-url" data-url="https://www.bb.org.bd/en/index.php/about/executives">🏦 Bangladesh Bank Executives</button>
+        <button type="button" class="preset-url" data-url="https://www.dcaadhaka.org/general_members">✈️ DCAA Members Directory</button>
+        <button type="button" class="preset-url" data-url="https://bdyellowpages.net/">📖 BD Yellow Pages</button>
+        <button type="button" class="preset-url" data-url="https://www.amazingtoursbd.com/">🎒 Amazing Tours BD</button>
+      </div>
+    </div>
+
+    <!-- Active Loading State -->
+    <div id="loadingState" class="card loading-card" style="display: none;">
+      <div class="loading-spinner"></div>
+      <div class="live-counter-badge" id="liveCounterBadge">0 Leads Found</div>
+      <h3 id="loadingTitle">Scraping & AI-Validating Contacts...</h3>
+      <p id="loadingSubtitle" style="color: var(--text-secondary); font-size: 13px;">Checking SSRF boundaries, detecting scraping mode, and running AI validation.</p>
+      <div class="progress-bar">
+        <div class="progress-bar-fill"></div>
+      </div>
+      <button type="button" id="stopStreamBtn" class="btn btn-secondary" style="margin-top: 12px;">
+        ⏹️ Stop & Keep Collected Leads
+      </button>
+    </div>
+
+    <!-- Error State -->
+    <div id="errorState" class="card error-card" style="display: none;">
+      <div style="font-size: 28px;">⚠️</div>
+      <div style="flex: 1;">
+        <h3 id="errorTitle" style="color: #991b1b; font-size: 15px;">Scrape Failed</h3>
+        <p id="errorMessage" style="color: #b91c1c; font-size: 13px;">Could not scrape target URL.</p>
+      </div>
+      <button type="button" id="dismissErrorBtn" class="btn btn-secondary">Dismiss</button>
+    </div>
+
+    <!-- Empty State -->
+    <div id="emptyState" class="card empty-card" style="display: none;">
+      <div style="font-size: 36px; margin-bottom: 8px;">🔍</div>
+      <h3>No Qualified Contacts Found</h3>
+      <p>No valid contact details passed rule-based and AI validation on this webpage.</p>
+    </div>
+
+    <!-- Results Section -->
+    <section id="resultsSection" style="display: none; flex-direction: column; gap: 16px;">
+      <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px;">
+        <div>
+          <h2 id="resultsCount" style="font-size: 18px; font-weight: 700;">0 Qualified Leads</h2>
+          <div style="display: flex; gap: 8px; margin-top: 4px;">
+            <span class="badge-tag" id="phoneCountPill">📞 0 with phone</span>
+            <span class="badge-tag" id="emailCountPill">📧 0 with email</span>
+            <span class="badge-tag" id="sourcePill">🌐 Direct URL</span>
+          </div>
+        </div>
+
+        <div style="display: flex; gap: 8px; align-items: center;">
+          <input
+            type="text"
+            id="filterInput"
+            class="filter-input"
+            placeholder="Filter current results..."
+            style="width: 200px;"
+          />
+          <button type="button" id="copyAllBtn" class="btn btn-secondary">
+            📋 Copy All
+          </button>
+          <button type="button" id="exportCsvBtn" class="btn btn-success">
+            💾 Export CSV
+          </button>
+        </div>
+      </div>
+
+      <!-- Table View -->
+      <div class="table-container">
+        <table class="leads-table">
+          <thead>
+            <tr>
+              <th>#</th>
+              <th>Business / Organization</th>
+              <th>Contact Person</th>
+              <th>Designation</th>
+              <th>Phone (+880)</th>
+              <th>Email</th>
+              <th>AI Score</th>
+              <th>Mode</th>
+              <th>Source URL</th>
+            </tr>
+          </thead>
+          <tbody id="leadsTableBody">
+            <!-- Dynamically populated rows in real-time -->
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- Footer -->
+    <footer class="footer">
+      <p>© Sunset Group • Direct URL Scraper & AI Validation System</p>
+    </footer>
+  </div>
+
+  <script src="/static/url_scraper.js"></script>
+</body>
+</html>
