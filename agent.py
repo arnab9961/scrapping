@@ -181,6 +181,20 @@ def stream_leads_generator(
                 ai_eval = validate_lead_with_ai(cand, target_industry=category)
 
                 if ai_eval.get("is_valid") and ai_eval.get("recommended_action") == "accept":
+                    # Strict post-validation enforcement on phone
+                    raw_p = cand.get("phone", "N/A")
+                    final_phone = "N/A"
+                    if raw_p and str(raw_p).strip().lower() not in ("n/a", "none", "null", ""):
+                        from validators.phone import normalize_bd_phone
+                        is_v, norm_p, _ = normalize_bd_phone(raw_p)
+                        if is_v and norm_p:
+                            final_phone = norm_p
+
+                    final_email = cand.get("email", "N/A")
+                    if final_phone == "N/A" and (not final_email or final_email == "N/A" or "@" not in final_email):
+                        rejected_count += 1
+                        continue
+
                     qualified_count += 1
                     # Format for streaming response
                     lead_out = {
@@ -192,8 +206,8 @@ def stream_leads_generator(
                         "address": cand.get("address") or full_address,
                         "city": loc_display,
                         "country": country.strip(),
-                        "phone": cand.get("phone", "N/A"),
-                        "email": cand.get("email", "N/A"),
+                        "phone": final_phone,
+                        "email": final_email,
                         "website": cand.get("website", target_url),
                         "source_url": target_url,
                         "ai_confidence_score": ai_eval.get("confidence_score", 90),
@@ -395,6 +409,20 @@ def stream_url_leads_generator(
         # AI validation
         ai_eval = validate_lead_with_ai(cand, target_industry=target_industry_label)
         if ai_eval.get("is_valid") and ai_eval.get("recommended_action") == "accept":
+            # Strict post-validation enforcement on phone
+            raw_p = cand.get("phone", "N/A")
+            final_phone = "N/A"
+            if raw_p and str(raw_p).strip().lower() not in ("n/a", "none", "null", ""):
+                from validators.phone import normalize_bd_phone
+                is_v, norm_p, _ = normalize_bd_phone(raw_p)
+                if is_v and norm_p:
+                    final_phone = norm_p
+
+            final_email = cand.get("email", "N/A")
+            if final_phone == "N/A" and (not final_email or final_email == "N/A" or "@" not in final_email):
+                rejected_count += 1
+                continue
+
             qualified_count += 1
             lead_out = {
                 "name": cand.get("contact_person") or cand.get("name") or "Contact Person",
@@ -405,8 +433,8 @@ def stream_url_leads_generator(
                 "address": cand.get("address") or "N/A",
                 "city": cand.get("city") or "N/A",
                 "country": cand.get("country") or "Bangladesh",
-                "phone": cand.get("phone", "N/A"),
-                "email": cand.get("email", "N/A"),
+                "phone": final_phone,
+                "email": final_email,
                 "website": cand.get("website", clean_url),
                 "source_url": clean_url,
                 "ai_confidence_score": ai_eval.get("confidence_score", 90),

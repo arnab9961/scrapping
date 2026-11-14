@@ -180,6 +180,19 @@ def save_qualified_lead(data: Dict[str, Any]) -> int:
     """Inserts a qualified, AI-validated lead into the 'leads' table."""
     canonical_domain = extract_canonical_domain(data.get("website") or data.get("source_url") or "")
     
+    # Enforce strict phone validation at the database boundary
+    raw_phone = data.get("phone") or "N/A"
+    clean_phone = "N/A"
+    if raw_phone and str(raw_phone).strip().lower() not in ("n/a", "none", "null", ""):
+        from validators.phone import normalize_bd_phone
+        is_val, norm_p, _ = normalize_bd_phone(raw_phone)
+        if is_val and norm_p:
+            clean_phone = norm_p
+
+    clean_email = data.get("email") or "N/A"
+    if clean_phone == "N/A" and (not clean_email or clean_email == "N/A" or "@" not in clean_email):
+        raise ValueError("Cannot save lead without valid Bangladesh mobile phone (+8801...) or email")
+    
     with get_db_connection() as conn:
         cursor = conn.cursor()
         cursor.execute("""
@@ -194,8 +207,8 @@ def save_qualified_lead(data: Dict[str, Any]) -> int:
             data.get("contact_person") or data.get("name") or "Contact Person",
             data.get("designation") or "Executive",
             data.get("industry") or data.get("category") or "Hospitality & Corporate",
-            data.get("phone") or "N/A",
-            data.get("email") or "N/A",
+            clean_phone,
+            clean_email,
             data.get("website") or "N/A",
             canonical_domain,
             data.get("address") or "N/A",

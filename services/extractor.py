@@ -132,7 +132,7 @@ def extract_json_ld(soup: BeautifulSoup, page_url: str) -> List[Dict[str, Any]]:
                             'business_name': b_name or "Business",
                             'contact_person': p_name,
                             'designation': job or ("Managing Director" if is_person_name(name) else "Representative"),
-                            'phone': norm_tel if is_val else (tel or "N/A"),
+                            'phone': norm_tel if is_val else "N/A",
                             'email': email or "N/A",
                             'website': web,
                             'address': addr_str or "N/A",
@@ -160,10 +160,10 @@ def extract_semantic_links(soup: BeautifulSoup) -> Tuple[List[str], List[str]]:
                 if not raw_chunk:
                     continue
                 is_val, norm_p, _ = normalize_bd_phone(raw_chunk)
-                val = norm_p if is_val else raw_chunk
-                if val not in seen_phones:
-                    seen_phones.add(val)
-                    phones.append(val)
+                if is_val and norm_p:
+                    if norm_p not in seen_phones:
+                        seen_phones.add(norm_p)
+                        phones.append(norm_p)
         elif href.lower().startswith('mailto:'):
             raw_email = urllib.parse.unquote(href[7:].split('?')[0]).strip().lower()
             for em_chunk in re.split(r'[,;/]', raw_email):
