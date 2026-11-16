@@ -1,16 +1,16 @@
 import json
-import re
 import urllib.parse
 from typing import List, Dict, Any, Tuple, Generator, Optional
 import config
 from tools import web_search, is_skippable_url, check_robots_txt, extract_pagination_links
-from validators.phone import normalize_bd_phone, extract_and_normalize_bd_phones
+from validators.phone import normalize_bd_phone
 from validators.url import validate_safe_url
 from services.scraper import adaptive_scrape
-from services.extractor import extract_leads_from_html, clean_person_name, is_person_name
+from services.extractor import extract_leads_from_html
 from services.deduplicator import DuplicateDetector
 from services.ai_validator import validate_lead_with_ai
 from services.job_manager import JobManager
+from services.database import log_rejected_lead
 
 def generate_search_matrix(category: str, city: str, area: str = "", country: str = "Bangladesh") -> List[str]:
     """
@@ -170,7 +170,6 @@ def stream_leads_generator(
                     rejected_count += 1
                     cand["rejection_stage"] = "duplicate"
                     cand["reason"] = dup_reason or "Duplicate lead"
-                    from services.database import log_rejected_lead
                     log_rejected_lead(cand)
                     continue
 
@@ -363,19 +362,25 @@ def stream_url_leads_generator(
         domain_label = "Directory"
     target_industry_label = f"Corporate & Commercial Directory ({domain_label})"
 
-    for cand in main_leads:
+    def _evaluate_candidate(
+        cand: Dict[str, Any],
+        page_url: str,
+        scrape_mode: str,
+        render_fallback: bool
+    ) -> Tuple[Optional[Dict[str, Any]], bool]:
+        """Processes a lead candidate through deduplication and Groq AI validation."""
+        nonlocal total_scraped, rejected_count, duplicate_count
         total_scraped += 1
-        cand["scraping_mode"] = scrape_res.scraping_mode
-        cand["render_fallback_used"] = scrape_res.render_fallback_used
-        cand["source_url"] = clean_url
+        cand["scraping_mode"] = scrape_mode
+        cand["render_fallback_used"] = render_fallback
+        cand["source_url"] = page_url
 
-        # Duplicate check
         is_dup, dup_reason = detector.check_duplicate(cand)
         if is_dup:
             duplicate_count += 1
             if "already registered" in (dup_reason or "").lower():
-                # Previously saved qualified lead - yield to direct results table
-                qualified_count += 1
+                raw_p = cand.get("phone", "N/A")
+                is_v, norm_p, _ = normalize_bd_phone(raw_p)
                 lead_out = {
                     "name": cand.get("contact_person") or cand.get("name") or "Contact Person",
                     "business_name": cand.get("business_name") or cand.get("organization") or "Direct URL Lead",
@@ -385,35 +390,30 @@ def stream_url_leads_generator(
                     "address": cand.get("address") or "N/A",
                     "city": cand.get("city") or "N/A",
                     "country": cand.get("country") or "Bangladesh",
-                    "phone": cand.get("phone", "N/A"),
+                    "phone": norm_p if is_v and norm_p else "N/A",
                     "email": cand.get("email", "N/A"),
-                    "website": cand.get("website", clean_url),
-                    "source_url": clean_url,
+                    "website": cand.get("website", page_url),
+                    "source_url": page_url,
                     "ai_confidence_score": cand.get("ai_confidence_score") or 90,
                     "ai_validation_reason": "Verified corporate lead (already registered in database)",
-                    "scraping_mode": scrape_res.scraping_mode,
-                    "render_fallback_used": scrape_res.render_fallback_used
+                    "scraping_mode": scrape_mode,
+                    "render_fallback_used": render_fallback
                 }
-                yield {"type": "lead", "job_id": job_id, "data": lead_out, "count": qualified_count}
-                continue
+                return lead_out, True
 
             rejected_count += 1
             cand["rejection_stage"] = "duplicate"
             cand["reason"] = dup_reason or "Duplicate lead"
-            from services.database import log_rejected_lead
             log_rejected_lead(cand)
-            continue
+            return None, False
 
         detector.record_lead(cand)
 
-        # AI validation
         ai_eval = validate_lead_with_ai(cand, target_industry=target_industry_label)
         if ai_eval.get("is_valid") and ai_eval.get("recommended_action") == "accept":
-            # Strict post-validation enforcement on phone
             raw_p = cand.get("phone", "N/A")
             final_phone = "N/A"
             if raw_p and str(raw_p).strip().lower() not in ("n/a", "none", "null", ""):
-                from validators.phone import normalize_bd_phone
                 is_v, norm_p, _ = normalize_bd_phone(raw_p)
                 if is_v and norm_p:
                     final_phone = norm_p
@@ -421,9 +421,8 @@ def stream_url_leads_generator(
             final_email = cand.get("email", "N/A")
             if final_phone == "N/A" and (not final_email or final_email == "N/A" or "@" not in final_email):
                 rejected_count += 1
-                continue
+                return None, False
 
-            qualified_count += 1
             lead_out = {
                 "name": cand.get("contact_person") or cand.get("name") or "Contact Person",
                 "business_name": cand.get("business_name") or cand.get("organization") or "Direct URL Lead",
@@ -435,16 +434,23 @@ def stream_url_leads_generator(
                 "country": cand.get("country") or "Bangladesh",
                 "phone": final_phone,
                 "email": final_email,
-                "website": cand.get("website", clean_url),
-                "source_url": clean_url,
+                "website": cand.get("website", page_url),
+                "source_url": page_url,
                 "ai_confidence_score": ai_eval.get("confidence_score", 90),
                 "ai_validation_reason": ai_eval.get("reason", "Verified"),
-                "scraping_mode": scrape_res.scraping_mode,
-                "render_fallback_used": scrape_res.render_fallback_used
+                "scraping_mode": scrape_mode,
+                "render_fallback_used": render_fallback
             }
+            return lead_out, True
+
+        rejected_count += 1
+        return None, False
+
+    for cand in main_leads:
+        lead_out, is_qual = _evaluate_candidate(cand, clean_url, scrape_res.scraping_mode, scrape_res.render_fallback_used)
+        if is_qual and lead_out:
+            qualified_count += 1
             yield {"type": "lead", "job_id": job_id, "data": lead_out, "count": qualified_count}
-        else:
-            rejected_count += 1
 
     JobManager.update_progress(
         job_id,
@@ -497,70 +503,10 @@ def stream_url_leads_generator(
                         sub_leads = extract_leads_from_html(pw_sub.html, sub_url)
 
                 for cand in sub_leads:
-                    total_scraped += 1
-                    cand["scraping_mode"] = sub_res.scraping_mode
-                    cand["render_fallback_used"] = sub_res.render_fallback_used
-                    cand["source_url"] = sub_url
-
-                    is_dup, dup_reason = detector.check_duplicate(cand)
-                    if is_dup:
-                        duplicate_count += 1
-                        if "already registered" in (dup_reason or "").lower():
-                            qualified_count += 1
-                            lead_out = {
-                                "name": cand.get("contact_person") or cand.get("name") or "Contact Person",
-                                "business_name": cand.get("business_name") or cand.get("organization") or "Direct URL Lead",
-                                "designation": cand.get("designation") or "Executive",
-                                "organization": cand.get("business_name") or cand.get("organization") or "Direct URL Lead",
-                                "category": "Direct Scrape",
-                                "address": cand.get("address") or "N/A",
-                                "city": cand.get("city") or "N/A",
-                                "country": cand.get("country") or "Bangladesh",
-                                "phone": cand.get("phone", "N/A"),
-                                "email": cand.get("email", "N/A"),
-                                "website": cand.get("website", sub_url),
-                                "source_url": sub_url,
-                                "ai_confidence_score": cand.get("ai_confidence_score") or 90,
-                                "ai_validation_reason": "Verified corporate lead (already registered in database)",
-                                "scraping_mode": sub_res.scraping_mode,
-                                "render_fallback_used": sub_res.render_fallback_used
-                            }
-                            yield {"type": "lead", "job_id": job_id, "data": lead_out, "count": qualified_count}
-                            continue
-
-                        rejected_count += 1
-                        cand["rejection_stage"] = "duplicate"
-                        cand["reason"] = dup_reason or "Duplicate lead"
-                        from services.database import log_rejected_lead
-                        log_rejected_lead(cand)
-                        continue
-
-                    detector.record_lead(cand)
-
-                    ai_eval = validate_lead_with_ai(cand, target_industry=target_industry_label)
-                    if ai_eval.get("is_valid") and ai_eval.get("recommended_action") == "accept":
+                    lead_out, is_qual = _evaluate_candidate(cand, sub_url, sub_res.scraping_mode, sub_res.render_fallback_used)
+                    if is_qual and lead_out:
                         qualified_count += 1
-                        lead_out = {
-                            "name": cand.get("contact_person") or cand.get("name") or "Contact Person",
-                            "business_name": cand.get("business_name") or cand.get("organization") or "Direct URL Lead",
-                            "designation": cand.get("designation") or "Executive",
-                            "organization": cand.get("business_name") or cand.get("organization") or "Direct URL Lead",
-                            "category": "Direct Scrape",
-                            "address": cand.get("address") or "N/A",
-                            "city": cand.get("city") or "N/A",
-                            "country": cand.get("country") or "Bangladesh",
-                            "phone": cand.get("phone", "N/A"),
-                            "email": cand.get("email", "N/A"),
-                            "website": cand.get("website", sub_url),
-                            "source_url": sub_url,
-                            "ai_confidence_score": ai_eval.get("confidence_score", 90),
-                            "ai_validation_reason": ai_eval.get("reason", "Verified"),
-                            "scraping_mode": sub_res.scraping_mode,
-                            "render_fallback_used": sub_res.render_fallback_used
-                        }
                         yield {"type": "lead", "job_id": job_id, "data": lead_out, "count": qualified_count}
-                    else:
-                        rejected_count += 1
 
                 JobManager.update_progress(
                     job_id,
@@ -593,7 +539,3 @@ def fallback_heuristic_search(city: str, category: str, target_count: int = 100,
         elif msg.get("type") == "done":
             queries = msg.get("queries", [])
     return leads, queries
-
-def run_llm_agent(city: str, category: str, max_iterations: int = 10, target_count: int = 100, area: str = "", country: str = "Bangladesh") -> Tuple[List[Dict[str, Any]], List[str]]:
-    """Synchronous agent runner."""
-    return fallback_heuristic_search(city, category, target_count=target_count, area=area, country=country)

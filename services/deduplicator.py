@@ -1,13 +1,6 @@
 import re
-from difflib import SequenceMatcher
 from typing import Dict, Any, Tuple, Optional, Set
-from .database import is_duplicate_lead, extract_canonical_domain
-
-def string_similarity(a: str, b: str) -> float:
-    """Calculates Levenshtein-like similarity ratio between 0.0 and 1.0."""
-    if not a or not b:
-        return 0.0
-    return SequenceMatcher(None, a.lower().strip(), b.lower().strip()).ratio()
+from .database import is_duplicate_lead
 
 class DuplicateDetector:
     """

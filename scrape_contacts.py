@@ -5,16 +5,7 @@ Consolidates with services.extractor and services.scraper.
 import sys
 from typing import List, Dict, Any, Tuple
 from services.scraper import adaptive_scrape
-from services.extractor import (
-    extract_leads_from_html,
-    is_person_name,
-    clean_person_name,
-    clean_text,
-    DESIGNATIONS,
-    ORG_KEYWORDS,
-    LABEL_WORDS
-)
-from validators.phone import normalize_bd_phone
+from services.extractor import extract_leads_from_html
 
 def smart_fetch(url: str, force_browser: bool = False, timeout: int = 8000) -> Tuple[Any, bool]:
     """Backward-compatible fetcher wrapping adaptive_scrape."""

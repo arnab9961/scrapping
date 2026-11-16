@@ -22,11 +22,6 @@ MODEL_NAME = (
 
 GROQ_BASE_URL = os.getenv("GROQ_BASE_URL", "https://api.groq.com/openai/v1").strip()
 
-# Legacy / Secondary OpenAI Config
-OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "").strip()
-LLM_BASE_URL = os.getenv("LLM_BASE_URL", "https://api.openai.com/v1").strip()
-LLM_MODEL = os.getenv("LLM_MODEL", "gpt-4o-mini").strip()
-
 # Primary Search API Configuration (Brave Search)
 BRAVE_SEARCH_API_KEY = os.getenv("BRAVE_SEARCH_API_KEY", "").strip()
 
@@ -52,10 +47,6 @@ DB_PATH = Path(os.getenv("DB_PATH", str(DATA_DIR / "sunset_leads.db")))
 def has_groq_credentials() -> bool:
     """Returns True if Groq API key is present."""
     return bool(GROQ_CLOUD_API_KEY)
-
-def has_llm_credentials() -> bool:
-    """Returns True if any LLM credentials exist."""
-    return bool(GROQ_CLOUD_API_KEY or OPENAI_API_KEY)
 
 def has_brave_credentials() -> bool:
     """Returns True if Brave Search API key is present."""

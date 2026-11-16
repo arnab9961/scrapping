@@ -229,11 +229,12 @@ copyAllBtn.addEventListener('click', async () => {
 exportCsvBtn.addEventListener('click', () => {
   if (currentLeads.length === 0) return;
 
-  const headers = ['Business Name', 'Contact Person', 'Designation', 'Industry', 'Phone', 'Email', 'City', 'AI Confidence', 'Scraping Mode', 'Source URL'];
+  const headers = ['#', 'Business Name', 'Contact Person', 'Designation', 'Industry', 'Phone', 'Email', 'City', 'Source URL'];
   const csvRows = [headers.join(',')];
 
-  currentLeads.forEach(l => {
+  currentLeads.forEach((l, idx) => {
     const row = [
+      idx + 1,
       escapeCsv(l.business_name || l.organization),
       escapeCsv(l.name || l.contact_person),
       escapeCsv(l.designation || 'Executive'),
@@ -241,8 +242,6 @@ exportCsvBtn.addEventListener('click', () => {
       escapeCsv(l.phone),
       escapeCsv(l.email),
       escapeCsv(l.city || activeCity),
-      escapeCsv(l.ai_confidence_score || 90),
-      escapeCsv(l.scraping_mode || 'http'),
       escapeCsv(l.source_url)
     ];
     csvRows.push(row.join(','));

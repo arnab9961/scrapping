@@ -421,56 +421,6 @@ body {
 }
 
 /* Badge System */
-.badge-score {
-  display: inline-flex;
-  align-items: center;
-  padding: 3px 8px;
-  border-radius: 9999px;
-  font-size: 11px;
-  font-weight: 700;
-}
-
-.badge-score-high {
-  background-color: var(--success-light);
-  color: var(--success-hover);
-  border: 1px solid #a7f3d0;
-}
-
-.badge-score-mid {
-  background-color: var(--primary-light);
-  color: var(--primary-hover);
-  border: 1px solid var(--primary-border);
-}
-
-.badge-score-low {
-  background-color: var(--danger-light);
-  color: #b91c1c;
-  border: 1px solid #fecaca;
-}
-
-.badge-mode {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  padding: 2px 8px;
-  border-radius: var(--radius-sm);
-  font-size: 11px;
-  font-weight: 600;
-  text-transform: uppercase;
-}
-
-.badge-mode-http {
-  background: #f1f5f9;
-  color: var(--text-secondary);
-  border: 1px solid var(--border-color);
-}
-
-.badge-mode-playwright {
-  background: var(--purple-light);
-  color: var(--purple);
-  border: 1px solid #ddd6fe;
-}
-
 .badge-tag {
   display: inline-block;
   padding: 2px 8px;
