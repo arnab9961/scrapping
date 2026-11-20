@@ -2,7 +2,7 @@ import json
 import urllib.parse
 from typing import List, Dict, Any, Tuple, Generator, Optional
 import config
-from tools import web_search, is_skippable_url, check_robots_txt, extract_pagination_links
+from tools import web_search, is_skippable_url, check_robots_txt, extract_pagination_links, extract_contact_subpages
 from validators.phone import normalize_bd_phone
 from validators.url import validate_safe_url
 from services.scraper import adaptive_scrape
@@ -14,7 +14,7 @@ from services.database import log_rejected_lead
 
 def generate_search_matrix(category: str, city: str, area: str = "", country: str = "Bangladesh") -> List[str]:
     """
-    Constructs an extensive, diversified search matrix targeting business prospects,
+    Constructs a highly focused, vertical-aware search matrix targeting business prospects,
     executives, and corporate decision-makers for Sunset Kuakata Hotel & Resort.
     """
     area_clean = (area or "").strip()
@@ -23,33 +23,44 @@ def generate_search_matrix(category: str, city: str, area: str = "", country: st
 
     local_target = f"{area_clean} {city_clean}".strip() if area_clean else city_clean
     is_bd = country_clean.lower() in ('bangladesh', 'bd')
+    cat_lower = category.lower()
 
+    # Core high-yield queries targeting decision makers and business contacts
     matrix = [
-        f'{category} companies in {local_target} {country_clean} contact phone',
         f'{category} owner managing director {local_target} phone email',
-        f'{category} corporate office {local_target} contact details',
+        f'{category} companies in {local_target} {country_clean} contact phone',
         f'{category} directory member list {city_clean} {country_clean}',
+        f'{category} corporate office {local_target} contact details',
     ]
 
     if is_bd:
-        matrix.extend([
-            f'travel agency association ATAB member list {local_target} contact phone',
-            f'tour operators association TOAB directory {local_target} contact phone',
-            f'site:atab.org.bd member list {city_clean}',
-            f'site:toab.org members tour operator {city_clean}',
-            f'site:bangladeshbusinessdir.com {category} {local_target}',
-            f'site:bdtradeinfo.com {category} {local_target}',
-            f'Kuakata Coxs Bazar corporate tour package organizer {local_target} phone',
-            f'top corporate companies in {local_target} HR admin phone email',
-            f'garments buying house in {local_target} managing director phone',
-            f'event management conference organizers in {local_target} contact phone',
-            f'chamber of commerce DCCI member directory {city_clean} phone'
-        ])
+        # Category-specific vertical directories
+        if any(w in cat_lower for w in ['travel', 'tour', 'tourism', 'aviation', 'holiday', 'trip']):
+            matrix.extend([
+                f'travel agency association ATAB member list {local_target} contact phone',
+                f'tour operators association TOAB directory {local_target} contact phone',
+                f'site:atab.org.bd member list {city_clean}',
+            ])
+        elif any(w in cat_lower for w in ['garment', 'textile', 'apparel', 'buying house', 'fashion']):
+            matrix.extend([
+                f'garments buying house in {local_target} managing director phone',
+                f'BGMEA member directory {local_target} phone',
+            ])
+        elif any(w in cat_lower for w in ['doctor', 'hospital', 'clinic', 'medical', 'pharma', 'health']):
+            matrix.extend([
+                f'specialist doctor directory in {local_target} contact mobile',
+                f'hospital clinic chamber in {local_target} contact details phone',
+            ])
+        else:
+            matrix.extend([
+                f'site:bdtradeinfo.com {category} {local_target}',
+                f'site:bangladeshbusinessdir.com {category} {local_target}',
+                f'chamber of commerce DCCI member directory {city_clean} {category} phone',
+            ])
     else:
         matrix.extend([
             f'{category} association member directory {local_target} {country_clean}',
             f'top {category} agencies {local_target} phone email website',
-            f'corporate event planners {local_target} contact phone'
         ])
 
     return matrix
@@ -156,6 +167,31 @@ def stream_leads_generator(
                 default_category=category,
                 default_city=loc_display
             )
+
+            # Check contact/about subpages if homepage yielded no leads or lacks person name
+            if (len(extracted) == 0 or all(c.get("contact_person") == "Contact Person" for c in extracted)) and scrape_res.html:
+                sub_links = extract_contact_subpages(scrape_res.html, target_url, max_links=2)
+                for sub_u in sub_links:
+                    if sub_u in visited_urls:
+                        continue
+                    visited_urls.add(sub_u)
+                    sub_scrape = adaptive_scrape(sub_u)
+                    if sub_scrape.html:
+                        sub_extracted = extract_leads_from_html(
+                            html=sub_scrape.html,
+                            page_url=sub_u,
+                            default_category=category,
+                            default_city=loc_display
+                        )
+                        if sub_extracted:
+                            # Replace generic leads or extend with richer subpage data
+                            if len(extracted) == 0:
+                                extracted = sub_extracted
+                            else:
+                                for se in sub_extracted:
+                                    if se.get("contact_person") != "Contact Person":
+                                        extracted.append(se)
+                            break
 
             for cand in extracted:
                 total_scraped += 1

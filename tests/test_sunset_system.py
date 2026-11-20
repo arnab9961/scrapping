@@ -174,6 +174,126 @@ def test_lead_extraction_semantic_and_cards():
     assert lead["phone"] == "+8801819998877"
     assert lead["email"] == "tanvir@sunsetholidays.com"
 
+def test_person_name_cleaning_and_identification():
+    from services.extractor import is_person_name, clean_person_name, split_name_and_designation
+
+    # Valid personal names
+    assert is_person_name("Tanvir Ahmed") is True
+    assert is_person_name("Kamal Hossain") is True
+    assert is_person_name("Farhana Rahman") is True
+    assert is_person_name("Md. Rafiqul Islam") is True
+    assert is_person_name("Mr. Shamsul Huda") is True
+    assert is_person_name("Dr. Zakir Hossain") is True
+    assert is_person_name("Engr. Subhash Barua") is True
+    assert is_person_name("MD. AMINUL ISLAM") is True
+    assert is_person_name("Md.Kamrul Hasan") is True
+    assert is_person_name("মোঃ রফিকুল ইসলাম") is True
+    assert is_person_name("ইঞ্জিনিয়ার তানভীর আহমেদ") is True
+
+    # Organization names MUST be rejected as person names
+    assert is_person_name("Nearby Engineers") is False
+    assert is_person_name("Apex Holdings") is False
+    assert is_person_name("Standard Builders") is False
+    assert is_person_name("Vertex Technologies") is False
+    assert is_person_name("Discovery Tours BD") is False
+    assert is_person_name("Green Travel Ltd") is False
+
+    # Name and designation splitting
+    name1, role1 = split_name_and_designation("Engr. Subhash Barua, Managing Director")
+    assert clean_person_name(name1) == "Engr. Subhash Barua"
+    assert role1 == "Managing Director"
+
+    name2, role2 = split_name_and_designation("Mr. Shafiqul Alam (Director)")
+    assert clean_person_name(name2) == "Mr. Shafiqul Alam"
+    assert role2 == "Director"
+
+def test_table_directory_lead_extraction():
+    table_sample = """
+    <table>
+      <thead>
+        <tr>
+          <th>SL</th>
+          <th>Company Name</th>
+          <th>Contact Person</th>
+          <th>Designation</th>
+          <th>Phone</th>
+          <th>Email</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>1</td>
+          <td>Air Span Ltd</td>
+          <td>Md. Zillur Rahman</td>
+          <td>Managing Director</td>
+          <td>+8801711223344</td>
+          <td>info@airspan.com</td>
+        </tr>
+        <tr>
+          <td>2</td>
+          <td>Bengal Eco Tours</td>
+          <td>Kamal Hossain</td>
+          <td>CEO</td>
+          <td>+8801812345678</td>
+          <td>kamal@bengaltours.com</td>
+        </tr>
+      </tbody>
+    </table>
+    """
+    leads = extract_leads_from_html(table_sample, "https://atab.org.bd/members")
+    assert len(leads) == 2
+    assert leads[0]["business_name"] == "Air Span Ltd"
+    assert leads[0]["contact_person"] == "Md. Zillur Rahman"
+    assert leads[0]["designation"] == "Managing Director"
+    assert leads[0]["phone"] == "+8801711223344"
+
+    assert leads[1]["business_name"] == "Bengal Eco Tours"
+    assert leads[1]["contact_person"] == "Kamal Hossain"
+    assert leads[1]["designation"] == "Ceo"
+    assert leads[1]["phone"] == "+8801812345678"
+
+def test_card_with_labeled_fields_and_nested_classes():
+    card_html = """
+    <div class="card">
+      <div class="company-name">Bengal Heritage Tourism</div>
+      <div class="person-name">Md. Anisuzzaman</div>
+      <div class="designation">Founder & CEO</div>
+      <a href="tel:+8801812345678">01812345678</a>
+      <a href="mailto:anis@bengalheritage.com">anis@bengalheritage.com</a>
+    </div>
+    """
+    leads = extract_leads_from_html(card_html, "https://bengalheritage.com")
+    assert len(leads) >= 1
+    assert leads[0]["contact_person"] == "Md. Anisuzzaman"
+    assert leads[0]["business_name"] == "Bengal Heritage Tourism"
+    assert "Founder" in leads[0]["designation"]
+    assert leads[0]["phone"] == "+8801812345678"
+    assert leads[0]["email"] == "anis@bengalheritage.com"
+
+def test_json_ld_with_nested_founder():
+    json_ld = """
+    <script type="application/ld+json">
+    {
+      "@type": "Organization",
+      "name": "Sunset Retreat Kuakata",
+      "telephone": "+8801799887766",
+      "email": "info@sunsetretreat.com",
+      "founder": {
+        "@type": "Person",
+        "name": "Md. Aminul Islam",
+        "jobTitle": "Managing Director"
+      }
+    }
+    </script>
+    """
+    leads = extract_leads_from_html(json_ld, "https://sunsetretreat.com")
+    assert len(leads) >= 1
+    assert leads[0]["business_name"] == "Sunset Retreat Kuakata"
+    assert leads[0]["contact_person"] == "Md. Aminul Islam"
+    assert leads[0]["phone"] == "+8801799887766"
+    assert leads[0]["email"] == "info@sunsetretreat.com"
+
+
 # 4. Duplicate Detection Tests
 def test_duplicate_detector():
     detector = DuplicateDetector()

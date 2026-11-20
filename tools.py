@@ -275,3 +275,47 @@ def extract_pagination_links(html: str, base_url: str, max_links: int = 15) -> L
     except Exception:
         pass
     return found
+
+def extract_contact_subpages(html: str, base_url: str, max_links: int = 3) -> List[str]:
+    """
+    Discovers contact, about, team, and executive subpages on the same domain
+    to uncover direct decision-maker names and mobile numbers.
+    """
+    found = []
+    seen = {base_url.rstrip('/')}
+    try:
+        from bs4 import BeautifulSoup
+        soup = BeautifulSoup(html, 'html.parser')
+        parsed_base = urllib.parse.urlparse(base_url)
+        if not parsed_base.netloc:
+            return []
+
+        contact_patterns = [
+            r'/(?:contact|contact-us|contactus|contact_us|get-in-touch|reach-us)\b',
+            r'/(?:about|about-us|aboutus|about_us|who-we-are|company-profile)\b',
+            r'/(?:team|our-team|management|leadership|board-of-directors|executives|key-personnel|members|directory)\b',
+        ]
+
+        # Prioritize matching links
+        for a in soup.find_all('a', href=True):
+            href = a['href'].strip()
+            text = clean_text(a.get_text()).lower()
+            
+            # Check href or anchor text
+            matches_href = any(re.search(pat, href, re.IGNORECASE) for pat in contact_patterns)
+            matches_text = any(t in text for t in ['contact us', 'contact', 'about us', 'about', 'our team', 'management', 'leadership', 'executives', 'directors'])
+            
+            if matches_href or matches_text:
+                full_url = urllib.parse.urljoin(base_url, href).split('#')[0].rstrip('/')
+                parsed_target = urllib.parse.urlparse(full_url)
+                if parsed_target.netloc.lower() == parsed_base.netloc.lower() and full_url not in seen:
+                    # Avoid non-html endpoints (pdf, jpg, etc.)
+                    if not re.search(r'\.(?:pdf|png|jpg|jpeg|gif|svg|zip|docx?|xlsx?)$', parsed_target.path, re.IGNORECASE):
+                        seen.add(full_url)
+                        found.append(full_url)
+            if len(found) >= max_links:
+                break
+    except Exception:
+        pass
+    return found
+
