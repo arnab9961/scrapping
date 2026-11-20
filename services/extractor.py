@@ -42,6 +42,25 @@ ORG_KEYWORDS = {
     'trust', 'union', 'committee', 'center', 'centre', 'club'
 }
 
+NON_PERSON_WORDS = {
+    # Metadata, Licensing & Directory words
+    'member', 'since', 'membership', 'id', 'license', 'licence', 'status', 'voter',
+    'representative', 'validity', 'expiry', 'reg', 'registration', 'tin', 'bin',
+    'code', 'sl', 'no', 'serial', 'type', 'category', 'date', 'incorporation',
+    'inception', 'depz', 'aepz', 'air', 'icd', 'pangaon', 'ref', 'fee', 'dues',
+    'voter/representative', 'representative/voter',
+    # Address, Property & Location words
+    'house', 'road', 'flat', 'plot', 'floor', 'room', 'block', 'sector', 'avenue',
+    'bazar', 'mansion', 'bhaban', 'tower', 'plaza', 'building', 'centre', 'center',
+    'dhaka', 'motijheel', 'gulshan', 'banani', 'uttara', 'dhanmondi', 'kamalapur',
+    'paltan', 'chattogram', 'chittagong', 'sylhet', 'khulna', 'rajshahi', 'barishal',
+    'bangladesh', 'address', 'location', 'office', 'branch', 'suite', 'lane',
+    # UI & Web words
+    'website', 'web', 'email', 'phone', 'mobile', 'tel', 'fax', 'call', 'details',
+    'view', 'profile', 'home', 'back', 'next', 'previous', 'click', 'here', 'more',
+    'read', 'about', 'contact', 'info', 'all', 'sorting'
+}
+
 PERSON_PREFIXES = [
     r'\b(?:mr|mrs|ms|miss|dr|engr|engineer|prof|professor|advocate|adv|barrister|sheikh|syed|haji|alhaj|al-haj|kazi|begum|capt|captain|md|mohammad|mohammed|muhammad|mohd|janab)\b\.?',
     r'(?:মোঃ|মো:|মোহাম্মদ|মুহাম্মদ|ড\.|ডঃ|ইঞ্জিঃ|ইঞ্জিনিয়ার|অধ্যাপক|ব্যরিস্টার|অ্যাডভোকেট|শেখ|সৈয়দ|কাজী|বেগম|হাজী|আলহাজ্ব|জনাব)'
@@ -49,34 +68,36 @@ PERSON_PREFIXES = [
 
 BD_NAME_COMPONENTS = {
     'ahmed', 'akram', 'akter', 'alam', 'alamgir', 'ali', 'amin', 'aminul', 'anisur', 'anisuzzaman',
-    'anwar', 'arif', 'ashraf', 'azad', 'azim', 'aziz', 'bakkar', 'bashar', 'basher', 'chowdhury',
-    'dewan', 'farhad', 'farhana', 'farid', 'habib', 'habibur', 'hafiz', 'haque', 'harun', 'hasan',
-    'hassan', 'hasanuzzaman', 'helal', 'hossain', 'hossein', 'huda', 'humayun', 'ibrahim', 'imtiaz',
-    'iqbal', 'islam', 'jahangir', 'jahan', 'jalal', 'jamal', 'kabir', 'kamal', 'kamrul', 'karim',
-    'kashem', 'khan', 'khaleque', 'khatun', 'khondoker', 'laskar', 'mahbub', 'mahbubur', 'mahfuz',
-    'mahmood', 'mahmud', 'mamun', 'mannan', 'masud', 'masum', 'miah', 'mir', 'mizanur', 'mofizur',
-    'molla', 'monir', 'moniruzzaman', 'morshed', 'mostafa', 'motalib', 'motin', 'mojibur', 'mujibur',
-    'mukter', 'mukul', 'munir', 'nasir', 'nasiruddin', 'nayeem', 'nazmul', 'nazrul', 'nur',
-    'nuralam', 'nurunnabi', 'palash', 'parvez', 'patwary', 'quader', 'rafiq', 'rafiqul', 'rahim',
-    'rahman', 'rashed', 'rashid', 'rayhan', 'raza', 'reza', 'rezaul', 'ripon', 'robin', 'roni',
-    'rony', 'rouf', 'roy', 'sabbir', 'sadeq', 'sadiq', 'saha', 'saidur', 'saiful', 'salahuddin',
-    'salim', 'samad', 'sarker', 'sayeed', 'sayed', 'selim', 'sen', 'shafiq', 'shafiqul', 'shah',
-    'shahid', 'shahidul', 'shahin', 'shahinur', 'shahriar', 'shahjahan', 'shams', 'shamsul',
-    'sharif', 'siddique', 'sikder', 'sojib', 'sultan', 'talukder', 'tapan', 'tareq', 'tariq',
-    'tanvir', 'tofazzal', 'tuhin', 'uddin', 'zahid', 'zakir', 'zaman', 'zia', 'ziaur'
+    'anwar', 'arif', 'ashraf', 'azad', 'azim', 'aziz', 'bakkar', 'bashar', 'basher', 'bapari', 'bahadur',
+    'chowdhury', 'dewan', 'farhad', 'farhana', 'farid', 'habib', 'habibur', 'hafiz', 'haque', 'harun',
+    'hasan', 'hassan', 'hasanuzzaman', 'helal', 'hossain', 'hossein', 'huda', 'humayun', 'ibrahim',
+    'imtiaz', 'iqbal', 'isa', 'islam', 'jahangir', 'jahan', 'jalal', 'jamal', 'kabir', 'kamal',
+    'kamrul', 'karim', 'kashem', 'khan', 'khaleque', 'khatun', 'khondoker', 'laskar', 'mahbub',
+    'mahbubur', 'mahfuz', 'mahmood', 'mahmud', 'mamun', 'mannan', 'masud', 'masum', 'miah',
+    'mir', 'mizanur', 'mofizur', 'molla', 'monir', 'moniruzzaman', 'morshed', 'mostafa', 'motalib',
+    'motin', 'mojibur', 'mujibur', 'mukter', 'mukul', 'munir', 'nasir', 'nasiruddin', 'nayeem',
+    'nazmul', 'nazrul', 'nur', 'nuralam', 'nurunnabi', 'palash', 'parvez', 'patwary', 'quader',
+    'rafiq', 'rafiqul', 'rahim', 'rahman', 'rana', 'razzaque', 'rashed', 'rashid', 'rayhan', 'raza',
+    'reza', 'rezaul', 'ripon', 'robin', 'roni', 'rony', 'rouf', 'roy', 'sabbir', 'sadeq', 'sadiq',
+    'saha', 'saidur', 'saiful', 'salahuddin', 'salim', 'samad', 'sarker', 'sayeed', 'sayed',
+    'selim', 'sen', 'shafiq', 'shafiqul', 'shah', 'shahid', 'shahidul', 'shahin', 'shahinur',
+    'shahriar', 'shahjahan', 'shams', 'shamsul', 'sharif', 'siddique', 'sikder', 'sohel', 'sojib',
+    'sultan', 'talukder', 'tapan', 'tareq', 'tariq', 'tanvir', 'tofazzal', 'tuhin', 'uddin',
+    'zahid', 'zakir', 'zaman', 'zia', 'ziaur'
 }
 
 DESIGNATIONS = [
-    'managing director', 'md', 'chief executive officer', 'ceo', 'deputy managing director', 'dmd',
-    'executive director', 'director', 'founder', 'co-founder', 'proprietor', 'owner',
-    'general manager', 'gm', 'assistant general manager', 'agm',
-    'head of corporate admin', 'head of hr', 'hr manager', 'admin manager',
+    'senior vice president', 'sr. vice president', 'sr vice president', 'first vice president',
+    'vice president', 'president', 'deputy managing director', 'dmd', 'managing director', 'm/dir',
+    'executive director', 'director', 'vice chairman', 'chairman', 'founder', 'co-founder',
+    'proprietor', 'prop', 'owner', 'partner', 'general manager', 'gm', 'assistant general manager',
+    'agm', 'head of corporate admin', 'head of hr', 'hr manager', 'admin manager',
     'head of sales', 'sales manager', 'marketing manager', 'event manager',
     'tour coordinator', 'tour manager', 'branch manager', 'operations manager',
-    'president', 'vice president', 'secretary general', 'general secretary', 'secretary',
-    'joint secretary', 'treasurer', 'chairman', 'vice chairman',
-    'contact person', 'representative', 'executive', 'officer', 'governor',
-    'consultant', 'advisor', 'principal', 'partner', 'manager',
+    'secretary general', 'general secretary', 'joint secretary', 'secretary', 'treasurer',
+    'chief executive officer', 'ceo', 'chief operating officer', 'coo', 'chief technology officer',
+    'cto', 'chief financial officer', 'cfo', 'contact person', 'representative', 'executive',
+    'officer', 'governor', 'manager', 'principal', 'advisor', 'consultant',
     'স্বত্বাধিকারী', 'ব্যবস্থাপনা পরিচালক', 'পরিচালক', 'চেয়ারম্যান', 'সভাপতি', 'সাধারণ সম্পাদক',
     'নির্বাহী কর্মকর্তা', 'প্রধান নির্বাহী', 'ব্যবস্থাপক'
 ]
@@ -95,7 +116,7 @@ LABEL_WORDS = {
 TRAILING_JUNK_WORDS = {
     'phone', 'email', 'flat', 'road', 'house', 'plot', 'contact', 'cell', 'tel',
     'mobile', 'office', 'avenue', 'block', 'sector', 'profile', 'details',
-    'call', 'fax', 'website', 'web',
+    'call', 'fax', 'website', 'web', 'since', 'id', 'license', 'voter',
     'ফোন', 'মোবাইল', 'ইমেইল', 'যোগাযোগ', 'ঠিকানা', 'নাম'
 }
 
@@ -105,11 +126,25 @@ def clean_text(text: Any) -> str:
         return ""
     return re.sub(r'\s+', ' ', str(text)).strip()
 
+def clean_business_name(name: str) -> str:
+    """Strips metadata, license numbers, RL numbers, and member IDs from business names."""
+    if not name:
+        return ""
+    text = clean_text(name)
+    # Strip suffixes like "RL No: 1034", "License: ...", "Member ID: ...", "Member Since: ..."
+    text = re.sub(r'\s*(?:RL\s*No|License|Licence|Member\s*ID|Member\s*Since|Mem\s*No|Reg\s*No|TIN|BIN)\s*[:\-–—#]?\s*[\w\d\(\)/\-]+.*$', '', text, flags=re.IGNORECASE)
+    # Strip any trailing role / contact leaks from multi-line text
+    text = re.sub(r'\s*(?:Prop|M/Dir|Director|MD|Chairman|Managing\s*Director)\s*[:\-–—].*$', '', text, flags=re.IGNORECASE)
+    # Strip address leaks
+    text = re.sub(r'\s*(?:Flat\s*#|House\s*No|Road\s*No|Plot\s*#).*$', '', text, flags=re.IGNORECASE)
+    return text.strip(' ,-–—|:;')
+
 def split_name_and_designation(raw: str) -> Tuple[str, Optional[str]]:
     """
     Separates a person's name and designation if joined by comma, hyphen, parentheses, or pipe.
     E.g. 'Engr. Subhash Barua, Managing Director' -> ('Engr. Subhash Barua', 'Managing Director')
     E.g. 'Mr. Shafiqul Alam (Director)' -> ('Mr. Shafiqul Alam', 'Director')
+    E.g. 'Mr. Abdur Razzaque Sr. Vice President' -> ('Mr. Abdur Razzaque', 'Sr. Vice President')
     """
     if not raw:
         return "", None
@@ -117,14 +152,26 @@ def split_name_and_designation(raw: str) -> Tuple[str, Optional[str]]:
     text = clean_text(raw)
     detected_role = None
 
-    # Check parentheses: e.g. "Md. Rafiq (CEO)"
+    # Check parentheses: e.g. "Md. Rafiq (CEO)" or "Atiqur Rahman (Voter)"
     m_paren = re.search(r'\(([^)]+)\)', text)
     if m_paren:
         inside = m_paren.group(1).strip()
         for d in DESIGNATIONS:
             if re.search(r'\b' + re.escape(d) + r'\b', inside, re.IGNORECASE):
                 detected_role = d.title()
-                text = text.replace(m_paren.group(0), '').strip()
+                break
+        # Always strip non-name parentheticals like (Voter), (Representative), (Dir), (MD)
+        text = text.replace(m_paren.group(0), '').strip()
+
+    # Check multi-word designation suffixes: e.g. "Mr. Abdur Razzaque Sr. Vice President"
+    for d in DESIGNATIONS:
+        pat = r'^(.*?)\s+(' + re.escape(d) + r')$'
+        m_suf = re.search(pat, text, re.IGNORECASE)
+        if m_suf:
+            p_cand = m_suf.group(1).strip()
+            if is_person_name(p_cand):
+                detected_role = d.title()
+                text = p_cand
                 break
 
     # Check delimiters: comma, hyphen, pipe, dash
@@ -161,9 +208,12 @@ def clean_person_name(name: str) -> str:
 
     text = clean_text(name)
 
-    # Strip leading label prefixes: e.g. "Name: Md. Kamal", "Contact Person - Tanvir"
+    # Strip parenthetical annotations: (Voter), (Representative), (Dir), (MD)
+    text = re.sub(r'\s*\((?:Voter|Representative|Member|Dir|MD|ICD|DEPZ)[^)]*\)', '', text, flags=re.IGNORECASE).strip()
+
+    # Strip leading label prefixes: e.g. "Name: Md. Kamal", "Contact Person - Tanvir", "Prop: ..."
     text = re.sub(
-        r'^(?:name|contact\s*person|contact\s*name|contact|person|key\s*person|full\s*name|executive|proprietor|owner|managing\s*director|director|ceo|md|নাম|যোগাযোগ|স্বত্বাধিকারী)[\s:\-–—|]+',
+        r'^(?:name|contact\s*person|contact\s*name|contact|person|key\s*person|full\s*name|executive|proprietor|prop|owner|managing\s*director|m/dir|director|ceo|md|chairman|president|নাম|যোগাযোগ|স্বত্বাধিকারী)[\s:\-–—|]+',
         '',
         text,
         flags=re.IGNORECASE
@@ -175,12 +225,16 @@ def clean_person_name(name: str) -> str:
     # Fix fused honorifics: e.g. "Mr.MdShahinur" -> "Mr. Md. Shahinur"
     text = re.sub(r'\b(Mr|Mrs|Ms|Dr|Engr|Prof)\.?(Md)([A-Z\u0980-\u09FF])', r'\1. \2. \3', text)
 
+    # Clean fused trailing designations: e.g. "Nazmul AhmedManaging" -> "Nazmul Ahmed"
+    for d in ['Managing', 'Director', 'President', 'Chairman', 'Proprietor']:
+        text = re.sub(rf'([a-z]+)({d}\b)', r'\1 \2', text)
+
     # Clean punctuation tokens and trailing junk words
     tokens = text.split()
     while tokens and (tokens[-1].lower() in TRAILING_JUNK_WORDS or tokens[-1].lower() in [d.lower() for d in DESIGNATIONS]):
         tokens.pop()
 
-    cleaned = ' '.join(tokens).strip(', -–—|:;')
+    cleaned = ' '.join(tokens).strip(', -–—|:;#')
     return cleaned
 
 def is_person_name(name: str) -> bool:
@@ -189,12 +243,12 @@ def is_person_name(name: str) -> bool:
     if not clean or len(clean) < 3 or len(clean) > 60:
         return False
 
-    clean_no_punct = re.sub(r'[,:\-–—|()]', ' ', clean)
+    clean_no_punct = re.sub(r'[,:\-–—|()#/\\0-9]', ' ', clean)
     clean_no_punct = clean_text(clean_no_punct)
     lower = clean_no_punct.lower()
 
     # Reject URLs, emails, phone digits
-    if '@' in lower or 'http' in lower or '.com' in lower or re.search(r'\d{3,}', lower):
+    if '@' in lower or 'http' in lower or '.com' in lower:
         return False
 
     # Check for Bengali script
@@ -210,7 +264,12 @@ def is_person_name(name: str) -> bool:
     if not words or len(words) < 2:
         return False
 
-    # If ANY word matches an organization keyword, reject (it's a company!)
+    # REJECT if ANY word matches NON_PERSON_WORDS (addresses, metadata, UI labels)
+    # E.g. "Member Since", "Member ID", "Kamalapur Bazar", "Flat Road", "License 17/13"
+    if any(w in NON_PERSON_WORDS for w in words):
+        return False
+
+    # REJECT if ANY word matches an organization keyword (it's a company!)
     if any(w in ORG_KEYWORDS for w in words):
         return False
 
@@ -291,7 +350,7 @@ def extract_json_ld(soup: BeautifulSoup, page_url: str) -> List[Dict[str, Any]]:
                         continue
                     types = str(sub.get('@type', '')).lower()
 
-                    raw_name = clean_text(sub.get('name') or sub.get('legalName'))
+                    raw_name = clean_business_name(clean_text(sub.get('name') or sub.get('legalName')))
                     tel = clean_text(sub.get('telephone') or sub.get('phone'))
                     email = clean_text(sub.get('email'))
                     web = clean_text(sub.get('url') or page_url)
@@ -308,7 +367,6 @@ def extract_json_ld(soup: BeautifulSoup, page_url: str) -> List[Dict[str, Any]]:
                         addr_str = address_data
 
                     person_cand = None
-                    # Check nested founder, employee, member, contactPoint
                     for key in ['founder', 'founders', 'employee', 'employees', 'member', 'members', 'author']:
                         nested = sub.get(key)
                         if isinstance(nested, dict):
@@ -371,6 +429,153 @@ def extract_json_ld(soup: BeautifulSoup, page_url: str) -> List[Dict[str, Any]]:
             continue
     return leads
 
+def extract_key_value_profile(
+    soup: BeautifulSoup,
+    page_url: str,
+    default_category: str = "Hospitality & Tourism",
+    default_city: str = "Dhaka"
+) -> Optional[Dict[str, Any]]:
+    """
+    Extracts structured data from vertical profile pages formatted with Key-Value tables or definition rows.
+    (e.g., REHAB member-details/1337, NBL branch-map, corporate member profiles).
+    """
+    kv_map: Dict[str, str] = {}
+    for tr in soup.find_all('tr'):
+        cells = tr.find_all(['th', 'td'])
+        if len(cells) in (2, 3):
+            label = clean_text(cells[0].get_text()).lower().rstrip(':')
+            val = clean_text(cells[-1].get_text())
+            if label and val:
+                kv_map[label] = val
+
+    # Also check dl, dt, dd
+    for dt in soup.find_all('dt'):
+        dd = dt.find_next_sibling('dd')
+        if dd:
+            label = clean_text(dt.get_text()).lower().rstrip(':')
+            val = clean_text(dd.get_text())
+            if label and val:
+                kv_map[label] = val
+
+    if not kv_map:
+        return None
+
+    has_company = any(any(w in k for w in ['company', 'agency', 'organization', 'branch', 'প্রতিষ্ঠান']) for k in kv_map)
+    has_contact = any(any(w in k for w in ['representative', 'contact', 'owner', 'member', 'key person', 'director', 'proprietor', 'nam', 'নাম']) for k in kv_map if not any(w in k for w in ['company', 'agency', 'branch', 'organization'])) or any(k == 'name' for k in kv_map)
+    has_phone = any(any(w in k for w in ['phone', 'mobile', 'tel', 'cell', 'ফোন', 'মোবাইল']) for k in kv_map)
+
+    if not (has_company or (has_contact and has_phone)):
+        return None
+
+    des = None
+    for k, v in kv_map.items():
+        k_clean = k.lower().strip()
+        if any(w in k_clean for w in ['designation', 'role', 'title', 'position', 'job title', 'পদবী']):
+            val_clean = clean_text(v)
+            if val_clean and len(val_clean) <= 40:
+                des = val_clean
+                break
+
+    p_name = None
+    for k, v in kv_map.items():
+        k_clean = k.lower().strip()
+        if any(w in k_clean for w in ['company', 'agency', 'branch', 'firm', 'organization', 'office', 'type']):
+            continue
+        if any(w in k_clean for w in ['representative', 'contact person', 'owner', 'member name', 'key person', 'proprietor', 'managing director', 'director name', 'name', 'নাম']):
+            cand = v
+            if cand and cand.lower() not in ['representative', 'n/a', 'none', '-', 'contact person']:
+                nm, maybe_des = split_name_and_designation(cand)
+                clean_cand = clean_person_name(nm)
+                if is_person_name(clean_cand):
+                    p_name = clean_cand
+                    if maybe_des and not des:
+                        des = maybe_des
+                    break
+
+    b_name = None
+    for k, v in kv_map.items():
+        k_clean = k.lower().strip()
+        if any(w in k_clean for w in ['company name', 'agency name', 'name of company', 'organization name', 'firm name', 'business name', 'প্রতিষ্ঠানের নাম']):
+            cleaned = clean_business_name(v)
+            if cleaned and len(cleaned) >= 3:
+                b_name = cleaned
+                break
+
+    if not b_name:
+        for k, v in kv_map.items():
+            k_clean = k.lower().strip()
+            if ('company' in k_clean or 'organization' in k_clean) and not any(w in k_clean for w in ['type', 'status', 'category', 'reg']):
+                cleaned = clean_business_name(v)
+                if cleaned and len(cleaned) >= 3:
+                    b_name = cleaned
+                    break
+
+    if not b_name:
+        for h in soup.find_all(['h1', 'h2', 'h3']):
+            htext = clean_business_name(clean_text(h.get_text()))
+            if len(htext) >= 4 and not any(w in htext.lower() for w in ['member details', 'welcome', 'home', 'association', 'branch map', 'about us', 'contact us', 'rehab']):
+                b_name = htext
+                break
+
+    if not b_name and any('branch' in k for k in kv_map):
+        branch_val = next((v for k, v in kv_map.items() if 'branch' in k and 'name' in k), None) or next((v for k, v in kv_map.items() if 'branch' in k), None)
+        meta = extract_meta_tags(soup)
+        site_name = meta.get('og:site_name') or ''
+        if not site_name and soup.title:
+            site_name = clean_text(soup.title.string).split('|')[0].strip()
+            if '-' in site_name:
+                site_name = site_name.split('-')[0].strip()
+        if branch_val:
+            b_name = f"{site_name} - {branch_val}" if site_name else branch_val
+            if 'branch' not in b_name.lower():
+                b_name = f"{b_name} Branch"
+
+    addr = None
+    for k, v in kv_map.items():
+        k_clean = k.lower().strip()
+        if any(w in k_clean for w in ['address', 'location', 'ঠিকানা']):
+            val_clean = clean_text(v)
+            if val_clean and len(val_clean) >= 3:
+                addr = val_clean
+                break
+
+    all_phones = []
+    for k, v in kv_map.items():
+        if any(w in k for w in ['phone', 'mobile', 'tel', 'cell', 'contact no', 'ফোন', 'মোবাইল']):
+            phones = extract_and_normalize_bd_phones(v)
+            all_phones.extend(phones)
+
+    # Check semantic links for phones/emails
+    sem_phones, sem_emails = extract_semantic_links(soup)
+    all_phones = list(dict.fromkeys(all_phones + sem_phones))
+
+    all_emails = []
+    for k, v in kv_map.items():
+        if any(w in k for w in ['email', 'e-mail', 'mail', 'ইমেইল']):
+            ems = re.findall(r'\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b', v)
+            all_emails.extend(ems)
+    all_emails = list(dict.fromkeys(all_emails + sem_emails))
+
+    if not all_phones and not all_emails:
+        return None
+
+    is_branch = 'branch' in str(b_name).lower() or any('branch' in k for k in kv_map)
+
+    return {
+        'business_name': b_name or "Business",
+        'contact_person': p_name or ("Branch Manager" if is_branch else "Contact Person"),
+        'designation': des or ("Branch Manager" if is_branch else ("Managing Director" if p_name else "Representative")),
+        'industry': default_category,
+        'phone': all_phones[0] if all_phones else "N/A",
+        'email': all_emails[0] if all_emails else "N/A",
+        'address': addr or default_city,
+        'city': default_city,
+        'country': "Bangladesh",
+        'website': page_url,
+        'source_url': page_url,
+        'extraction_technique': 'key_value_profile'
+    }
+
 def extract_leads_from_tables(
     soup: BeautifulSoup,
     page_url: str,
@@ -380,8 +585,8 @@ def extract_leads_from_tables(
 ) -> List[Dict[str, Any]]:
     """
     Intelligent HTML <table> extraction.
-    Maps <thead> / <th> column headers to Name, Designation, Company, Phone, Email, Address
-    and extracts leads row by row. Falls back to per-cell inspection.
+    Handles <br> tags properly (converting them to newlines so names and designations don't concatenate).
+    Maps column headers to Name, Designation, Company, Phone, Email, Address.
     """
     leads = []
     tables = soup.find_all('table')
@@ -390,6 +595,14 @@ def extract_leads_from_tables(
         rows = table.find_all('tr')
         if not rows or len(rows) < 2:
             continue
+
+        # Check if table is a vertical key-value table
+        if len(rows) >= 3:
+            first_row_cells = rows[0].find_all(['th', 'td'])
+            if len(first_row_cells) in (2, 3):
+                first_label = clean_text(first_row_cells[0].get_text()).lower().rstrip(':')
+                if any(k in first_label for k in ['company', 'name', 'sl', 'member', 'type', 'serial']):
+                    pass
 
         headers = []
         header_tr = table.find('thead')
@@ -408,7 +621,14 @@ def extract_leads_from_tables(
         col_addr = -1
 
         for idx, h in enumerate(headers):
-            if any(w in h for w in ['name', 'person', 'contact person', 'member name', 'executive', 'owner', 'proprietor', 'নাম', 'যোগাযোগ']):
+            # Check combined header: "Name & Designation" / "Owner Name & Designation"
+            is_combined = any(w in h for w in ['name', 'person', 'owner']) and any(w in h for w in ['designation', 'role', 'title'])
+            if is_combined:
+                if col_name == -1:
+                    col_name = idx
+                continue
+
+            if any(w in h for w in ['name', 'person', 'contact person', 'member name', 'owner name', 'executive', 'proprietor', 'নাম', 'যোগাযোগ']):
                 if col_name == -1:
                     col_name = idx
             if any(w in h for w in ['company', 'organization', 'agency', 'firm', 'business', 'প্রতিষ্ঠানের নাম', 'প্রতিষ্ঠান']):
@@ -448,25 +668,42 @@ def extract_leads_from_tables(
             cand_role = None
             cand_addr = default_city
 
-            # 1. Use mapped columns if available
+            # 1. Use mapped columns if available with newline preservation for <br>
             if col_name != -1 and col_name < len(cells):
-                cell_val = clean_text(cells[col_name].get_text())
-                nm, des = split_name_and_designation(cell_val)
-                c_name = clean_person_name(nm)
-                if is_person_name(c_name):
-                    cand_person = c_name
-                    if des:
-                        cand_role = des
+                # Extract text splitting on <br> / \n
+                cell_lines = [clean_text(l) for l in cells[col_name].get_text(separator='\n').split('\n') if clean_text(l)]
+                if cell_lines:
+                    first_line = cell_lines[0]
+                    nm, des = split_name_and_designation(first_line)
+                    c_name = clean_person_name(nm)
+                    if is_person_name(c_name):
+                        cand_person = c_name
+                        if des:
+                            cand_role = des
+                    # If designation was on line 2 (e.g. Mr. Nazmul Ahmed <br> Managing Director)
+                    if len(cell_lines) > 1 and not cand_role:
+                        second_line = cell_lines[1]
+                        for d in DESIGNATIONS:
+                            if re.search(r'\b' + re.escape(d) + r'\b', second_line, re.IGNORECASE):
+                                cand_role = d.title()
+                                break
 
             if col_org != -1 and col_org < len(cells):
-                cell_org = clean_text(cells[col_org].get_text())
-                if cell_org and len(cell_org) >= 3 and cell_org.lower() not in LABEL_WORDS:
-                    cand_org = cell_org
+                cell_lines = [clean_text(l) for l in cells[col_org].get_text(separator='\n').split('\n') if clean_text(l)]
+                if cell_lines:
+                    cleaned_org = clean_business_name(cell_lines[0])
+                    if cleaned_org and len(cleaned_org) >= 3 and cleaned_org.lower() not in LABEL_WORDS:
+                        cand_org = cleaned_org
 
-            if col_des != -1 and col_des < len(cells) and not cand_role:
+            if col_des != -1 and col_des != col_name and col_des < len(cells) and not cand_role:
                 cell_des = clean_text(cells[col_des].get_text())
                 if cell_des and len(cell_des) >= 2:
-                    cand_role = cell_des.title()
+                    for d in DESIGNATIONS:
+                        if re.search(r'\b' + re.escape(d) + r'\b', cell_des, re.IGNORECASE):
+                            cand_role = d.title()
+                            break
+                    if not cand_role and len(cell_des) <= 30 and not is_person_name(cell_des):
+                        cand_role = cell_des.title()
 
             if col_addr != -1 and col_addr < len(cells):
                 cell_addr = clean_text(cells[col_addr].get_text())
@@ -478,29 +715,30 @@ def extract_leads_from_tables(
                 for c_idx, cell in enumerate(cells):
                     if c_idx in (col_phone, col_email):
                         continue
-                    c_text = clean_text(cell.get_text())
-                    if not c_text or c_text.lower() in LABEL_WORDS or len(c_text) < 3:
-                        continue
-
-                    nm, des = split_name_and_designation(c_text)
-                    clean_nm = clean_person_name(nm)
-                    if not cand_person and is_person_name(clean_nm):
-                        cand_person = clean_nm
-                        if des and not cand_role:
-                            cand_role = des
-                        continue
-
-                    if not cand_org:
-                        lower_c = c_text.lower()
-                        if any(w in lower_c for w in ORG_KEYWORDS):
-                            cand_org = c_text
+                    cell_lines = [clean_text(l) for l in cell.get_text(separator='\n').split('\n') if clean_text(l)]
+                    for c_text in cell_lines:
+                        if not c_text or c_text.lower() in LABEL_WORDS or len(c_text) < 3:
                             continue
 
-                    if not cand_role:
-                        for d in DESIGNATIONS:
-                            if re.search(r'\b' + re.escape(d) + r'\b', c_text, re.IGNORECASE):
-                                cand_role = d.title()
-                                break
+                        nm, des = split_name_and_designation(c_text)
+                        clean_nm = clean_person_name(nm)
+                        if not cand_person and is_person_name(clean_nm):
+                            cand_person = clean_nm
+                            if des and not cand_role:
+                                cand_role = des
+                            continue
+
+                        if not cand_org:
+                            cleaned_b = clean_business_name(c_text)
+                            if any(w in cleaned_b.lower() for w in ORG_KEYWORDS) and not is_person_name(cleaned_b):
+                                cand_org = cleaned_b
+                                continue
+
+                        if not cand_role:
+                            for d in DESIGNATIONS:
+                                if re.search(r'\b' + re.escape(d) + r'\b', c_text, re.IGNORECASE):
+                                    cand_role = d.title()
+                                    break
 
             if not cand_role:
                 for d in DESIGNATIONS:
@@ -515,7 +753,7 @@ def extract_leads_from_tables(
             email_str = row_emails[0] if row_emails else "N/A"
 
             leads.append({
-                'business_name': final_org,
+                'business_name': clean_business_name(final_org),
                 'contact_person': final_person,
                 'designation': final_role,
                 'industry': default_category,
@@ -540,6 +778,7 @@ def extract_leads_from_cards(
 ) -> List[Dict[str, Any]]:
     """
     DOM & Card-based extraction across profile cards, team members, and directory items.
+    Handles multi-line blocks with labeled lines (e.g. Prop:, M/Dir:, Managing Director:).
     """
     leads = []
     card_selectors = [
@@ -595,45 +834,101 @@ def extract_leads_from_cards(
             cand_person = None
             cand_role = None
             cand_org = None
+            cand_addr = default_city
 
-            # 1. Check dedicated classes for person name
-            name_classes = ['.person-name', '.member-name', '.name', '.executive-name', '.contact-name', '.author', '[itemprop="name"]']
-            for nc in name_classes:
-                tag = el.select_one(nc)
-                if tag:
-                    raw_val = clean_text(tag.get_text())
-                    nm, des = split_name_and_designation(raw_val)
-                    c_name = clean_person_name(nm)
-                    if is_person_name(c_name):
-                        cand_person = c_name
-                        if des and not cand_role:
-                            cand_role = des
-                        break
+            # 1. Multi-line block parsing (vital for dcaadhaka, association listings)
+            # Find paragraphs or divs that contain multiple lines
+            for block in el.find_all(['p', 'div']):
+                block_lines = [clean_text(l) for l in block.get_text(separator='\n').split('\n') if clean_text(l)]
+                if len(block_lines) >= 2:
+                    for idx, line in enumerate(block_lines):
+                        # Line 0: Business Name candidate if not set
+                        if idx == 0 and not cand_org:
+                            c_org = clean_business_name(line)
+                            if len(c_org) >= 3 and not is_person_name(c_org):
+                                cand_org = c_org
 
-            # 2. Check dedicated classes for company name
-            org_classes = ['.company-name', '.company', '.org', '.organization', '.agency-name', '.business-name']
-            for oc in org_classes:
-                tag = el.select_one(oc)
-                if tag:
-                    raw_val = clean_text(tag.get_text())
-                    if raw_val and len(raw_val) >= 3 and raw_val.lower() not in LABEL_WORDS:
-                        cand_org = raw_val
-                        break
+                        # Check for labeled designation + person line: Prop:, M/Dir:, Managing Director:, Director:, Chairman:
+                        m_role = re.search(
+                            r'^(?:Prop|Proprietor|M/Dir|MD|Managing\s*Director|Director|Chairman|President|Sr\.?\s*Vice\s*President|Vice\s*President|CEO|Owner|Founder|Representative|Key\s*Person|Contact\s*Person|Name|স্বত্বাধিকারী|ব্যবস্থাপনা পরিচালক)\s*[:\-–—|]+\s*(.*)$',
+                            line,
+                            re.IGNORECASE
+                        )
+                        if m_role:
+                            label = re.search(r'^(.*?)\s*[:\-–—|]', line).group(1).strip()
+                            raw_val = m_role.group(1).strip()
+                            raw_val = re.sub(r'\s*\((?:Voter|Representative|Member|Dir|MD)[^)]*\)', '', raw_val, flags=re.IGNORECASE).strip()
+                            nm, des = split_name_and_designation(raw_val)
+                            c_name = clean_person_name(nm)
+                            if is_person_name(c_name) and not cand_person:
+                                cand_person = c_name
+                                l_lower = label.lower()
+                                if 'prop' in l_lower:
+                                    cand_role = "Proprietor"
+                                elif 'm/dir' in l_lower or l_lower == 'md' or 'managing' in l_lower:
+                                    cand_role = "Managing Director"
+                                elif 'sr' in l_lower and 'vice' in l_lower:
+                                    cand_role = "Sr. Vice President"
+                                elif 'vice' in l_lower:
+                                    cand_role = "Vice President"
+                                elif 'chair' in l_lower:
+                                    cand_role = "Chairman"
+                                elif 'dir' in l_lower:
+                                    cand_role = "Director"
+                                elif des:
+                                    cand_role = des
+                                elif 'ceo' in l_lower:
+                                    cand_role = "CEO"
+                                else:
+                                    cand_role = label.title()
 
-            # 3. Check dedicated classes for designation
-            des_classes = ['.designation', '.role', '.position', '.job-title']
-            for dc in des_classes:
-                tag = el.select_one(dc)
-                if tag:
-                    raw_val = clean_text(tag.get_text())
-                    if raw_val and len(raw_val) >= 2:
-                        cand_role = raw_val.title()
-                        break
+                        # Check if line is address
+                        if any(w in line.lower() for w in ['flat', 'house', 'road', 'floor', 'bhaban', 'mansion', 'dhaka', 'motijheel', 'dhanmondi', 'kamalapur', 'bazar', 'avenue']):
+                            if not any(w in line.lower() for w in ['license', 'member id', 'member since', 'prop:', 'm/dir:', 'director:']):
+                                if cand_addr == default_city and not any(line.lower().startswith(p) for p in ['ph:', 'phone:', 'mobile:', 'e-mail:', 'email:']):
+                                    cand_addr = line
 
-            # 4. Regex check for labeled fields like "Contact Person: Md. ...", "Name: ...", "Proprietor: ..."
+            # 2. Check dedicated classes for person name
+            if not cand_person:
+                name_classes = ['.person-name', '.member-name', '.name', '.executive-name', '.contact-name', '.author', '[itemprop="name"]']
+                for nc in name_classes:
+                    tag = el.select_one(nc)
+                    if tag:
+                        raw_val = clean_text(tag.get_text())
+                        nm, des = split_name_and_designation(raw_val)
+                        c_name = clean_person_name(nm)
+                        if is_person_name(c_name):
+                            cand_person = c_name
+                            if des and not cand_role:
+                                cand_role = des
+                            break
+
+            # 3. Check dedicated classes for company name
+            if not cand_org:
+                org_classes = ['.company-name', '.company', '.org', '.organization', '.agency-name', '.business-name']
+                for oc in org_classes:
+                    tag = el.select_one(oc)
+                    if tag:
+                        raw_val = clean_business_name(clean_text(tag.get_text()))
+                        if raw_val and len(raw_val) >= 3 and raw_val.lower() not in LABEL_WORDS:
+                            cand_org = raw_val
+                            break
+
+            # 4. Check dedicated classes for designation
+            if not cand_role:
+                des_classes = ['.designation', '.role', '.position', '.job-title']
+                for dc in des_classes:
+                    tag = el.select_one(dc)
+                    if tag:
+                        raw_val = clean_text(tag.get_text())
+                        if raw_val and len(raw_val) >= 2:
+                            cand_role = raw_val.title()
+                            break
+
+            # 5. Regex check for labeled fields like "Contact Person: Md. ...", "Name: ...", "Proprietor: ..."
             if not cand_person:
                 m_label = re.search(
-                    r'(?:Contact\s*Person|Contact\s*Name|Key\s*Person|Name|Proprietor|Owner|Founder|Director|Managing\s*Director|MD|CEO|Representative|Executive|নাম|যোগাযোগ|স্বত্বাধিকারী)\s*[:\-–—|]+\s*([^\n\r<]+?)(?=\s+(?:Designation|Phone|Mobile|Email|Tel|Cell|Address|\(Off|$))',
+                    r'(?:Contact\s*Person|Contact\s*Name|Key\s*Person|Name|Proprietor|Prop|Owner|Founder|Director|Managing\s*Director|M/Dir|MD|CEO|Representative|Executive|নাম|যোগাযোগ|স্বত্বাধিকারী)\s*[:\-–—|]+\s*([^\n\r<]+?)(?=\s+(?:Designation|Phone|Mobile|Email|Tel|Cell|Address|\(Off|$))',
                     el_text,
                     re.IGNORECASE
                 )
@@ -646,25 +941,8 @@ def extract_leads_from_cards(
                         if des and not cand_role:
                             cand_role = des
 
-            # 5. Check definition lists (<dl><dt>Name</dt><dd>Md. Kamal</dd></dl>)
-            if not cand_person:
-                dts = el.find_all('dt')
-                for dt in dts:
-                    dt_label = clean_text(dt.get_text()).lower()
-                    if any(w in dt_label for w in ['name', 'person', 'contact', 'member', 'নাম']):
-                        dd = dt.find_next_sibling('dd')
-                        if dd:
-                            raw_val = clean_text(dd.get_text())
-                            nm, des = split_name_and_designation(raw_val)
-                            c_name = clean_person_name(nm)
-                            if is_person_name(c_name):
-                                cand_person = c_name
-                                if des and not cand_role:
-                                    cand_role = des
-                                break
-
             # 6. Check headings or strong tags for person name or org
-            for heading in el.find_all(['h1', 'h2', 'h3', 'h4', 'h5', 'strong', 'font', 'p', 'div']):
+            for heading in el.find_all(['h1', 'h2', 'h3', 'h4', 'h5', 'strong', 'font']):
                 htext = clean_text(heading.get_text())
                 if not htext or htext.lower() in LABEL_WORDS or len(htext) < 3:
                     continue
@@ -677,8 +955,9 @@ def extract_leads_from_cards(
                     if des and not cand_role:
                         cand_role = des
                 elif not cand_org:
-                    if any(w in htext.lower() for w in ORG_KEYWORDS):
-                        cand_org = htext
+                    c_bname = clean_business_name(htext)
+                    if any(w in c_bname.lower() for w in ORG_KEYWORDS) and not is_person_name(c_bname):
+                        cand_org = c_bname
 
             # 7. Check for known designations if role not labeled
             if not cand_role:
@@ -688,7 +967,7 @@ def extract_leads_from_cards(
                         break
 
             p_name = cand_person or "Contact Person"
-            b_name = cand_org or primary_org
+            b_name = clean_business_name(cand_org or primary_org)
             role = cand_role or ("Managing Director" if p_name != "Contact Person" else "Executive / Decision Maker")
             phone_str = all_phones[0] if all_phones else "N/A"
             email_str = all_emails[0] if all_emails else "N/A"
@@ -701,7 +980,7 @@ def extract_leads_from_cards(
                 'phone': phone_str,
                 'email': email_str,
                 'website': page_url,
-                'address': default_city,
+                'address': cand_addr,
                 'city': default_city,
                 'country': "Bangladesh",
                 'source_url': page_url,
@@ -720,9 +999,10 @@ def extract_leads_from_html(
     Advanced multi-technique extraction pipeline.
     Prioritizes:
     1. Schema.org JSON-LD structured data (with nested person/founder/contactPoint)
-    2. Intelligent HTML tables (with column mapping)
-    3. Profile & Member Cards (with structured DOM selectors & labeled fields)
-    4. Fallback page text extraction
+    2. Single-member Key-Value profile structures (e.g. REHAB member-details, NBL branch-map)
+    3. Intelligent HTML tables (with column mapping & <br> splitting)
+    4. Profile & Member Cards (with multi-line block parsing)
+    5. Fallback page text extraction
     """
     if not html or not html.strip():
         return []
@@ -746,7 +1026,7 @@ def extract_leads_from_html(
     except Exception:
         domain_name = "Business Organization"
 
-    primary_org = site_title if site_title and len(site_title) < 60 else domain_name
+    primary_org = clean_business_name(site_title if site_title and len(site_title) < 60 else domain_name)
 
     # 1. Structured JSON-LD extraction
     json_leads = extract_json_ld(soup, page_url)
@@ -756,20 +1036,27 @@ def extract_leads_from_html(
             jl['city'] = default_city
             leads.append(jl)
 
-    # 2. Extract semantic tel: and mailto: links from whole page
+    # 2. Key-Value Profile Extraction (for dedicated member detail / branch pages)
+    kv_lead = extract_key_value_profile(soup, page_url, default_category, default_city)
+    if kv_lead:
+        leads.append(kv_lead)
+
+    # 3. Extract semantic tel: and mailto: links from whole page
     semantic_phones, semantic_emails = extract_semantic_links(soup)
 
-    # 3. HTML Table Extraction
-    table_leads = extract_leads_from_tables(soup, page_url, primary_org, default_category, default_city)
-    if table_leads:
-        leads.extend(table_leads)
+    # 4. HTML Table Extraction (if not already handled by key-value profile)
+    if not kv_lead:
+        table_leads = extract_leads_from_tables(soup, page_url, primary_org, default_category, default_city)
+        if table_leads:
+            leads.extend(table_leads)
 
-    # 4. Profile / Card Extraction
-    card_leads = extract_leads_from_cards(soup, page_url, primary_org, default_category, default_city)
-    if card_leads:
-        leads.extend(card_leads)
+    # 5. Profile / Card Extraction
+    if not kv_lead:
+        card_leads = extract_leads_from_cards(soup, page_url, primary_org, default_category, default_city)
+        if card_leads:
+            leads.extend(card_leads)
 
-    # 5. Fallback to general page text if no structured leads discovered
+    # 6. Fallback to general page text if no structured leads discovered
     if not leads:
         all_text = clean_text(soup.get_text())
         text_phones = extract_and_normalize_bd_phones(all_text)
@@ -790,7 +1077,7 @@ def extract_leads_from_html(
             # Check regex patterns in text
             if not detected_person:
                 role_patterns = [
-                    r'(?:Proprietor|Managing Director|MD|CEO|Director|Contact Person|Representative|Manager|Founder|Owner|স্বত্বাধিকারী|ব্যবস্থাপনা পরিচালক)\s*[:\-–—|]+\s*([A-Za-z\u0980-\u09FF\.\s]{3,40})(?=\s+(?:Phone|Mobile|Email|Tel|Cell|যোগাযোগ|ফোন|মোবাইল|ইমেইল|ঠিকানা|$))',
+                    r'(?:Proprietor|Prop|Managing Director|M/Dir|MD|CEO|Director|Chairman|President|Contact Person|Representative|Manager|Founder|Owner|স্বত্বাধিকারী|ব্যবস্থাপনা পরিচালক)\s*[:\-–—|]+\s*([A-Za-z\u0980-\u09FF\.\s]{3,40})(?=\s+(?:Phone|Mobile|Email|Tel|Cell|যোগাযোগ|ফোন|মোবাইল|ইমেইল|ঠিকানা|$))',
                     r'\b((?:Md|Mohammad|Mohammed|Muhammad|Dr|Engr|Prof|Mr|Mrs|Ms)\.?\s+[A-Z][a-zA-Z\.\s]{3,35})\b',
                     r'((?:মোঃ|মো:|মোহাম্মদ|ড\.|ডঃ|ইঞ্জিঃ)\s*[\u0980-\u09FF\s]{4,35})'
                 ]
