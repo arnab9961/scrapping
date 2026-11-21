@@ -1,9 +1,10 @@
 import json
 import urllib.parse
 from typing import List, Dict, Any, Tuple, Generator, Optional
+from concurrent.futures import ThreadPoolExecutor, as_completed
 import config
 from tools import web_search, is_skippable_url, check_robots_txt, extract_pagination_links, extract_contact_subpages
-from validators.phone import normalize_bd_phone
+from validators.phone import normalize_bd_phone, normalize_phone
 from validators.url import validate_safe_url
 from services.scraper import adaptive_scrape
 from services.extractor import extract_leads_from_html
@@ -11,6 +12,8 @@ from services.deduplicator import DuplicateDetector
 from services.ai_validator import validate_lead_with_ai
 from services.job_manager import JobManager
 from services.database import log_rejected_lead
+from services.checkpoint import save_checkpoint, get_checkpoint, clear_checkpoint
+from services.scorer import compute_lead_score
 
 def generate_search_matrix(category: str, city: str, area: str = "", country: str = "Bangladesh") -> List[str]:
     """
@@ -106,7 +109,18 @@ def stream_leads_generator(
     executed_queries = []
     visited_urls = set()
 
+    # Resume from checkpoint if available
+    cp = get_checkpoint(job_id) if job_id else None
+    start_q_idx = 1
+    if cp:
+        start_q_idx = int(cp.get("query_idx", 1))
+        visited_urls.update(cp.get("visited_urls", []))
+        qualified_count = int(cp.get("qualified_count", 0))
+        print(f"⏩ Resuming job '{job_id}' from Query {start_q_idx} with {qualified_count} existing leads")
+
     for q_idx, q in enumerate(queries, 1):
+        if q_idx < start_q_idx:
+            continue
         if qualified_count >= target_count:
             break
 
@@ -127,162 +141,185 @@ def stream_leads_generator(
             if u and not is_skippable_url(u) and u not in visited_urls:
                 target_urls.append(u)
 
-        # Scrape and process pages
+        # Filter against robots.txt and visited set
+        valid_targets = []
         for target_url in target_urls:
-            if qualified_count >= target_count:
-                break
             if target_url in visited_urls or is_skippable_url(target_url):
                 continue
-
             visited_urls.add(target_url)
-            if not check_robots_txt(target_url):
-                continue
+            if check_robots_txt(target_url):
+                valid_targets.append(target_url)
 
-            try:
-                parsed_host = urllib.parse.urlparse(target_url).netloc
-            except Exception:
-                parsed_host = target_url
-
-            yield {
-                "type": "progress",
-                "job_id": job_id,
-                "count": qualified_count,
-                "message": f"Scraping & validating: {parsed_host}..."
-            }
-
-            # Dual-mode adaptive scrape (Mode A HTTP -> Mode B Playwright)
-            scrape_res = adaptive_scrape(target_url)
-            if scrape_res.scraping_mode == "playwright":
-                playwright_count += 1
-            else:
-                http_count += 1
-
-            if not scrape_res.html:
-                continue
-
-            # Advanced extraction
-            extracted = extract_leads_from_html(
-                html=scrape_res.html,
-                page_url=target_url,
-                default_category=category,
-                default_city=loc_display
-            )
-
-            # Check contact/about subpages if homepage yielded no leads or lacks person name
-            if (len(extracted) == 0 or all(c.get("contact_person") == "Contact Person" for c in extracted)) and scrape_res.html:
-                sub_links = extract_contact_subpages(scrape_res.html, target_url, max_links=2)
-                for sub_u in sub_links:
-                    if sub_u in visited_urls:
-                        continue
-                    visited_urls.add(sub_u)
-                    sub_scrape = adaptive_scrape(sub_u)
-                    if sub_scrape.html:
-                        sub_extracted = extract_leads_from_html(
-                            html=sub_scrape.html,
-                            page_url=sub_u,
-                            default_category=category,
-                            default_city=loc_display
-                        )
-                        if sub_extracted:
-                            # Replace generic leads or extend with richer subpage data
-                            if len(extracted) == 0:
-                                extracted = sub_extracted
-                            else:
-                                for se in sub_extracted:
-                                    if se.get("contact_person") != "Contact Person":
-                                        extracted.append(se)
-                            break
-
-            for cand in extracted:
-                total_scraped += 1
-                cand["scraping_mode"] = scrape_res.scraping_mode
-                cand["render_fallback_used"] = scrape_res.render_fallback_used
-                cand["source_url"] = target_url
-
-                # Step 1: Duplicate check
-                is_dup, dup_reason = detector.check_duplicate(cand)
-                if is_dup:
-                    duplicate_count += 1
-                    rejected_count += 1
-                    cand["rejection_stage"] = "duplicate"
-                    cand["reason"] = dup_reason or "Duplicate lead"
-                    log_rejected_lead(cand)
+        # Concurrently fetch candidate pages using bounded thread pool
+        max_workers = min(getattr(config, "MAX_WORKERS", 6), len(valid_targets)) if valid_targets else 1
+        with ThreadPoolExecutor(max_workers=max_workers) as executor:
+            future_to_url = {executor.submit(adaptive_scrape, tu): tu for tu in valid_targets}
+            for future in as_completed(future_to_url):
+                if qualified_count >= target_count:
+                    break
+                target_url = future_to_url[future]
+                try:
+                    scrape_res = future.result()
+                except Exception as e:
                     continue
 
-                # Record in detector
-                detector.record_lead(cand)
+                if scrape_res.scraping_mode == "playwright":
+                    playwright_count += 1
+                else:
+                    http_count += 1
 
-                # Step 2: AI Validation Pipeline (Groq)
-                ai_eval = validate_lead_with_ai(cand, target_industry=category)
+                if not scrape_res.html:
+                    continue
 
-                if ai_eval.get("is_valid") and ai_eval.get("recommended_action") == "accept":
-                    # Strict post-validation enforcement on phone
-                    raw_p = cand.get("phone", "N/A")
-                    final_phone = "N/A"
-                    if raw_p and str(raw_p).strip().lower() not in ("n/a", "none", "null", ""):
-                        from validators.phone import normalize_bd_phone
-                        is_v, norm_p, _ = normalize_bd_phone(raw_p)
-                        if is_v and norm_p:
-                            final_phone = norm_p
+                # Advanced extraction
+                extracted = extract_leads_from_html(
+                    html=scrape_res.html,
+                    page_url=target_url,
+                    default_category=category,
+                    default_city=loc_display
+                )
 
-                    final_email = cand.get("email", "N/A")
-                    if final_phone == "N/A" and (not final_email or final_email == "N/A" or "@" not in final_email):
+                # Check contact/about subpages if homepage yielded no leads or lacks person name
+                if (len(extracted) == 0 or all(c.get("contact_person") == "Contact Person" for c in extracted)) and scrape_res.html:
+                    sub_links = extract_contact_subpages(scrape_res.html, target_url, max_links=2)
+                    for sub_u in sub_links:
+                        if sub_u in visited_urls or not check_robots_txt(sub_u):
+                            continue
+                        visited_urls.add(sub_u)
+                        sub_scrape = adaptive_scrape(sub_u)
+                        if sub_scrape.html:
+                            sub_extracted = extract_leads_from_html(
+                                html=sub_scrape.html,
+                                page_url=sub_u,
+                                default_category=category,
+                                default_city=loc_display
+                            )
+                            if sub_extracted:
+                                if len(extracted) == 0:
+                                    extracted = sub_extracted
+                                else:
+                                    for se in sub_extracted:
+                                        if se.get("contact_person") != "Contact Person":
+                                            extracted.append(se)
+                                break
+
+                for cand in extracted:
+                    total_scraped += 1
+                    cand["scraping_mode"] = scrape_res.scraping_mode
+                    cand["render_fallback_used"] = scrape_res.render_fallback_used
+                    cand["source_url"] = target_url
+
+                    # Step 1: Duplicate check (Exact & Fuzzy)
+                    is_dup, dup_reason = detector.check_duplicate(cand)
+                    if is_dup:
+                        duplicate_count += 1
                         rejected_count += 1
+                        cand["rejection_stage"] = "duplicate"
+                        cand["reason"] = dup_reason or "Duplicate lead"
+                        log_rejected_lead(cand)
                         continue
 
-                    qualified_count += 1
-                    # Format for streaming response
-                    lead_out = {
-                        "name": cand.get("contact_person") or cand.get("name") or "Contact Person",
-                        "business_name": cand.get("business_name") or cand.get("organization") or "Business",
-                        "designation": cand.get("designation") or "Executive",
-                        "organization": cand.get("business_name") or cand.get("organization") or "Business",
-                        "category": category,
-                        "address": cand.get("address") or full_address,
-                        "city": loc_display,
-                        "country": country.strip(),
-                        "phone": final_phone,
-                        "email": final_email,
-                        "website": cand.get("website", target_url),
-                        "source_url": target_url,
-                        "ai_confidence_score": ai_eval.get("confidence_score", 90),
-                        "ai_validation_reason": ai_eval.get("reason", "Verified prospect"),
-                        "scraping_mode": scrape_res.scraping_mode,
-                        "render_fallback_used": scrape_res.render_fallback_used
-                    }
+                    # Record in detector
+                    detector.record_lead(cand)
 
-                    JobManager.update_progress(
-                        job_id,
-                        total_scraped=total_scraped,
-                        qualified_count=qualified_count,
-                        rejected_count=rejected_count,
-                        duplicate_count=duplicate_count,
-                        http_count=http_count,
-                        playwright_count=playwright_count
-                    )
+                    # Step 2: AI Validation Pipeline (Groq)
+                    ai_eval = validate_lead_with_ai(cand, target_industry=category)
 
-                    yield {
-                        "type": "lead",
-                        "job_id": job_id,
-                        "data": lead_out,
-                        "count": qualified_count
-                    }
+                    if ai_eval.get("is_valid") and ai_eval.get("recommended_action") == "accept":
+                        # Multi-standard phone validation (BD mobile + Global E.164)
+                        raw_p = cand.get("phone", "N/A")
+                        final_phone = "N/A"
+                        p_type = cand.get("phone_type", "UNKNOWN")
+                        if raw_p and str(raw_p).strip().lower() not in ("n/a", "none", "null", ""):
+                            is_v, norm_p, _ = normalize_bd_phone(raw_p)
+                            if is_v and norm_p:
+                                final_phone = norm_p
+                                p_type = "MOBILE"
+                            else:
+                                is_vg, norm_g, _, g_type = normalize_phone(raw_p, allow_landline=getattr(config, "ALLOW_LANDLINE_PHONES", True))
+                                if is_vg and norm_g:
+                                    final_phone = norm_g
+                                    p_type = g_type
 
-                    if qualified_count >= target_count:
-                        break
-                else:
-                    rejected_count += 1
+                        final_email = cand.get("email", "N/A")
+                        if final_phone == "N/A" and (not final_email or final_email == "N/A" or "@" not in final_email):
+                            rejected_count += 1
+                            continue
 
-            JobManager.update_progress(
-                job_id,
-                total_scraped=total_scraped,
-                qualified_count=qualified_count,
-                rejected_count=rejected_count,
-                duplicate_count=duplicate_count,
-                http_count=http_count,
-                playwright_count=playwright_count
-            )
+                        comp_score, _, _ = compute_lead_score(cand)
+                        cand["completeness_score"] = comp_score
 
+                        qualified_count += 1
+                        lead_out = {
+                            "name": cand.get("contact_person") or cand.get("name") or "Contact Person",
+                            "business_name": cand.get("business_name") or cand.get("organization") or "Business",
+                            "designation": cand.get("designation") or "Executive",
+                            "organization": cand.get("business_name") or cand.get("organization") or "Business",
+                            "category": category,
+                            "address": cand.get("address") or full_address,
+                            "city": loc_display,
+                            "country": country.strip(),
+                            "phone": final_phone,
+                            "phone_type": p_type,
+                            "email": final_email,
+                            "email_type": cand.get("email_type", "UNKNOWN"),
+                            "website": cand.get("website", target_url),
+                            "canonical_domain": cand.get("canonical_domain", ""),
+                            "linkedin_url": cand.get("linkedin_url", ""),
+                            "facebook_url": cand.get("facebook_url", ""),
+                            "twitter_url": cand.get("twitter_url", ""),
+                            "secondary_phones": cand.get("secondary_phones", []),
+                            "secondary_emails": cand.get("secondary_emails", []),
+                            "completeness_score": comp_score,
+                            "source_url": target_url,
+                            "ai_confidence_score": ai_eval.get("confidence_score", 90),
+                            "ai_validation_reason": ai_eval.get("reason", "Verified prospect"),
+                            "scraping_mode": scrape_res.scraping_mode,
+                            "render_fallback_used": scrape_res.render_fallback_used
+                        }
+
+                        JobManager.update_progress(
+                            job_id,
+                            total_scraped=total_scraped,
+                            qualified_count=qualified_count,
+                            rejected_count=rejected_count,
+                            duplicate_count=duplicate_count,
+                            http_count=http_count,
+                            playwright_count=playwright_count
+                        )
+
+                        yield {
+                            "type": "lead",
+                            "job_id": job_id,
+                            "data": lead_out,
+                            "count": qualified_count
+                        }
+
+                        if qualified_count >= target_count:
+                            break
+                    else:
+                        rejected_count += 1
+
+        # Checkpoint after each completed query
+        if job_id:
+            save_checkpoint(job_id, {
+                "query_idx": q_idx + 1,
+                "visited_urls": list(visited_urls),
+                "qualified_count": qualified_count
+            })
+
+        JobManager.update_progress(
+            job_id,
+            total_scraped=total_scraped,
+            qualified_count=qualified_count,
+            rejected_count=rejected_count,
+            duplicate_count=duplicate_count,
+            http_count=http_count,
+            playwright_count=playwright_count
+        )
+
+    if job_id:
+        clear_checkpoint(job_id)
     JobManager.complete_job(job_id, status="completed")
 
     print(f"\n🏁 Lead generation complete for job {job_id}. Qualified: {qualified_count}, Rejected: {rejected_count}, Duplicates: {duplicate_count}")
@@ -317,6 +354,18 @@ def stream_url_leads_generator(
         yield {
             "type": "error",
             "message": f"Security restriction: {ssrf_err}"
+        }
+        return
+
+    # 1b. Robots.txt Compliance Check
+    if not check_robots_txt(clean_url):
+        if not job_id:
+            job_id = JobManager.create_job("direct_url", clean_url)
+        JobManager.complete_job(job_id, status="failed", error_message=f"Access disallowed by robots.txt on {clean_url}")
+        yield {
+            "type": "error",
+            "job_id": job_id,
+            "message": f"Crawling disallowed by robots.txt policy on {clean_url}"
         }
         return
 
@@ -449,15 +498,25 @@ def stream_url_leads_generator(
         if ai_eval.get("is_valid") and ai_eval.get("recommended_action") == "accept":
             raw_p = cand.get("phone", "N/A")
             final_phone = "N/A"
+            p_type = cand.get("phone_type", "UNKNOWN")
             if raw_p and str(raw_p).strip().lower() not in ("n/a", "none", "null", ""):
                 is_v, norm_p, _ = normalize_bd_phone(raw_p)
                 if is_v and norm_p:
                     final_phone = norm_p
+                    p_type = "MOBILE"
+                else:
+                    is_vg, norm_g, _, g_type = normalize_phone(raw_p, allow_landline=getattr(config, "ALLOW_LANDLINE_PHONES", True))
+                    if is_vg and norm_g:
+                        final_phone = norm_g
+                        p_type = g_type
 
             final_email = cand.get("email", "N/A")
             if final_phone == "N/A" and (not final_email or final_email == "N/A" or "@" not in final_email):
                 rejected_count += 1
                 return None, False
+
+            comp_score, _, _ = compute_lead_score(cand)
+            cand["completeness_score"] = comp_score
 
             lead_out = {
                 "name": cand.get("contact_person") or cand.get("name") or "Contact Person",
@@ -469,8 +528,17 @@ def stream_url_leads_generator(
                 "city": cand.get("city") or "N/A",
                 "country": cand.get("country") or "Bangladesh",
                 "phone": final_phone,
+                "phone_type": p_type,
                 "email": final_email,
+                "email_type": cand.get("email_type", "UNKNOWN"),
                 "website": cand.get("website", page_url),
+                "canonical_domain": cand.get("canonical_domain", ""),
+                "linkedin_url": cand.get("linkedin_url", ""),
+                "facebook_url": cand.get("facebook_url", ""),
+                "twitter_url": cand.get("twitter_url", ""),
+                "secondary_phones": cand.get("secondary_phones", []),
+                "secondary_emails": cand.get("secondary_emails", []),
+                "completeness_score": comp_score,
                 "source_url": page_url,
                 "ai_confidence_score": ai_eval.get("confidence_score", 90),
                 "ai_validation_reason": ai_eval.get("reason", "Verified"),
@@ -510,7 +578,7 @@ def stream_url_leads_generator(
             }
 
             for idx, sub_url in enumerate(pagination_links, 1):
-                if sub_url in visited_urls:
+                if sub_url in visited_urls or not check_robots_txt(sub_url):
                     continue
                 visited_urls.add(sub_url)
 
@@ -554,6 +622,8 @@ def stream_url_leads_generator(
                     playwright_count=playwright_count
                 )
 
+    if job_id:
+        clear_checkpoint(job_id)
     JobManager.complete_job(job_id, status="completed")
 
     yield {

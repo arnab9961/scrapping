@@ -18,3 +18,6 @@ tld>=0.13.2
 w3lib>=2.4.1
 Protego>=0.7.0
 apify-fingerprint-datapoints>=0.15.0
+PyYAML>=6.0.0
+email-validator>=2.0.0
+openpyxl>=3.1.0

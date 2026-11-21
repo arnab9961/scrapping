@@ -13,6 +13,7 @@ def get_db_connection() -> sqlite3.Connection:
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA journal_mode = WAL;")
     conn.execute("PRAGMA foreign_keys = ON;")
+    conn.execute("PRAGMA busy_timeout = 5000;")
     return conn
 
 def init_db():
@@ -103,6 +104,22 @@ def init_db():
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_leads_business ON leads(business_name);")
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_leads_created_at ON leads(created_at);")
 
+        # Migrate new columns if upgrading existing database
+        for col, col_type in [
+            ("phone_type", "TEXT DEFAULT 'UNKNOWN'"),
+            ("email_type", "TEXT DEFAULT 'UNKNOWN'"),
+            ("secondary_phones", "TEXT DEFAULT '[]'"),
+            ("secondary_emails", "TEXT DEFAULT '[]'"),
+            ("linkedin_url", "TEXT DEFAULT ''"),
+            ("facebook_url", "TEXT DEFAULT ''"),
+            ("twitter_url", "TEXT DEFAULT ''"),
+            ("completeness_score", "INTEGER DEFAULT 0")
+        ]:
+            try:
+                cursor.execute(f"ALTER TABLE leads ADD COLUMN {col} {col_type};")
+            except sqlite3.OperationalError:
+                pass  # column already exists
+
         conn.commit()
 
 def extract_canonical_domain(url: str) -> str:
@@ -177,22 +194,41 @@ def is_duplicate_lead(
     return False, None
 
 def save_qualified_lead(data: Dict[str, Any]) -> int:
-    """Inserts a qualified, AI-validated lead into the 'leads' table."""
+    """Inserts a qualified, AI-validated lead into the 'leads' table with enriched signals."""
     canonical_domain = extract_canonical_domain(data.get("website") or data.get("source_url") or "")
     
-    # Enforce strict phone validation at the database boundary
+    # Enforce phone validation allowing both BD mobile and global E.164 / landlines
     raw_phone = data.get("phone") or "N/A"
     clean_phone = "N/A"
+    p_type = data.get("phone_type") or "UNKNOWN"
     if raw_phone and str(raw_phone).strip().lower() not in ("n/a", "none", "null", ""):
-        from validators.phone import normalize_bd_phone
+        from validators.phone import normalize_bd_phone, normalize_phone
         is_val, norm_p, _ = normalize_bd_phone(raw_phone)
         if is_val and norm_p:
             clean_phone = norm_p
+            p_type = "MOBILE"
+        else:
+            is_val_g, norm_g, _, g_type = normalize_phone(raw_phone, allow_landline=True)
+            if is_val_g and norm_g:
+                clean_phone = norm_g
+                p_type = g_type
 
     clean_email = data.get("email") or "N/A"
     if clean_phone == "N/A" and (not clean_email or clean_email == "N/A" or "@" not in clean_email):
-        raise ValueError("Cannot save lead without valid Bangladesh mobile phone (+8801...) or email")
-    
+        raise ValueError("Cannot save lead without valid phone or email contact")
+
+    # Compute deterministic completeness score if not already present
+    comp_score = data.get("completeness_score")
+    if comp_score is None:
+        try:
+            from services.scorer import compute_lead_score
+            comp_score, _, _ = compute_lead_score(data)
+        except Exception:
+            comp_score = 0
+
+    sec_phones = json.dumps(data.get("secondary_phones", []), ensure_ascii=False) if isinstance(data.get("secondary_phones"), list) else str(data.get("secondary_phones", "[]"))
+    sec_emails = json.dumps(data.get("secondary_emails", []), ensure_ascii=False) if isinstance(data.get("secondary_emails"), list) else str(data.get("secondary_emails", "[]"))
+
     with get_db_connection() as conn:
         cursor = conn.cursor()
         cursor.execute("""
@@ -200,8 +236,10 @@ def save_qualified_lead(data: Dict[str, Any]) -> int:
             business_name, contact_person, designation, industry,
             phone, email, website, canonical_domain, address, city, country,
             ai_confidence_score, ai_validation_reason, ai_recommended_action,
-            scraping_mode, render_fallback_used, source_url
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            scraping_mode, render_fallback_used, source_url,
+            phone_type, email_type, secondary_phones, secondary_emails,
+            linkedin_url, facebook_url, twitter_url, completeness_score
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """, (
             data.get("business_name") or data.get("organization") or "Business",
             data.get("contact_person") or data.get("name") or "Contact Person",
@@ -219,7 +257,15 @@ def save_qualified_lead(data: Dict[str, Any]) -> int:
             data.get("ai_recommended_action") or data.get("recommended_action") or "accept",
             data.get("scraping_mode") or "http",
             1 if data.get("render_fallback_used") else 0,
-            data.get("source_url") or ""
+            data.get("source_url") or "",
+            p_type,
+            data.get("email_type") or "UNKNOWN",
+            sec_phones,
+            sec_emails,
+            data.get("linkedin_url") or "",
+            data.get("facebook_url") or "",
+            data.get("twitter_url") or "",
+            int(comp_score or 0)
         ))
         conn.commit()
         return cursor.lastrowid
@@ -419,6 +465,69 @@ def get_rejected_leads(page: int = 1, page_size: int = 25) -> Tuple[List[Dict[st
         """, (page_size, offset))
         rows = [dict(r) for r in cursor.fetchall()]
         return rows, total
+
+def stream_leads_csv(search: str = "", industry: str = ""):
+    """Streams full CSV export of qualified leads matching filters or all leads."""
+    import csv
+    import io
+    output = io.StringIO()
+    writer = csv.writer(output)
+
+    headers = [
+        "ID", "Business Name", "Contact Person", "Designation", "Industry",
+        "Phone", "Phone Type", "Email", "Email Type", "Website", "Address", "City", "Country",
+        "Completeness Score", "AI Confidence Score", "LinkedIn", "Facebook", "Twitter",
+        "Validation Reason", "Scraping Mode", "Source URL", "Created At"
+    ]
+    writer.writerow(headers)
+    yield output.getvalue()
+    output.seek(0)
+    output.truncate(0)
+
+    conditions = []
+    params = []
+    if search.strip():
+        term = f"%{search.strip()}%"
+        conditions.append("(business_name LIKE ? OR contact_person LIKE ? OR phone LIKE ? OR email LIKE ? OR city LIKE ?)")
+        params.extend([term, term, term, term, term])
+    if industry.strip():
+        conditions.append("industry LIKE ?")
+        params.append(f"%{industry.strip()}%")
+
+    where_clause = f"WHERE {' AND '.join(conditions)}" if conditions else ""
+
+    with get_db_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute(f"SELECT * FROM leads {where_clause} ORDER BY id DESC", tuple(params))
+        for row in cursor:
+            keys = row.keys()
+            writer.writerow([
+                row["id"],
+                row["business_name"],
+                row["contact_person"] or "N/A",
+                row["designation"] or "N/A",
+                row["industry"] or "N/A",
+                row["phone"],
+                row["phone_type"] if "phone_type" in keys else "UNKNOWN",
+                row["email"] or "N/A",
+                row["email_type"] if "email_type" in keys else "UNKNOWN",
+                row["website"] or "N/A",
+                row["address"] or "N/A",
+                row["city"] or "N/A",
+                row["country"] or "Bangladesh",
+                row["completeness_score"] if "completeness_score" in keys else 0,
+                row["ai_confidence_score"] or 0,
+                row["linkedin_url"] if "linkedin_url" in keys else "",
+                row["facebook_url"] if "facebook_url" in keys else "",
+                row["twitter_url"] if "twitter_url" in keys else "",
+                row["ai_validation_reason"] or "",
+                row["scraping_mode"] or "http",
+                row["source_url"] or "",
+                row["created_at"]
+            ])
+            yield output.getvalue()
+            output.seek(0)
+            output.truncate(0)
 
 # Initialize DB on module import
 init_db()

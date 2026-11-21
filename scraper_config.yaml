@@ -1,0 +1,37 @@
+# Scrapling Lead Generation & Scraping Engine Configuration
+# Overridable via .env variables
+
+general:
+  target_industry: "Corporate & Hospitality"
+  default_country: "Bangladesh"
+  default_city: "Dhaka"
+  client_name: "Sunset Group"
+  client_entity: "Sunset Kuakata Hotel & Resort"
+
+concurrency:
+  max_workers: 6
+  per_domain_delay_seconds: 1.0
+  http_timeout_seconds: 10.0
+  playwright_timeout_ms: 15000
+  max_retries: 2
+
+proxies:
+  enabled: false
+  http_proxy: ""
+  https_proxy: ""
+
+circuit_breaker:
+  failure_threshold: 3
+  recovery_time_seconds: 300.0
+
+validation:
+  min_completeness_score: 50
+  allow_landline_phones: true
+  drop_disposable_emails: true
+  fuzzy_dedup_threshold: 0.88
+
+ai_qualification:
+  enabled: true
+  provider: "groq"
+  model: "openai/gpt-oss-120b"
+  min_confidence: 60

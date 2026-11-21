@@ -298,41 +298,10 @@ nextRejectedBtn.addEventListener('click', () => {
   }
 });
 
-// Export CSV
+// Export Full Database CSV
 dashExportCsvBtn.addEventListener('click', () => {
-  if (currentLeads.length === 0) {
-    alert('No qualified leads available to export.');
-    return;
-  }
-
-  const headers = ['ID', 'Business Name', 'Contact Person', 'Designation', 'Industry', 'Phone', 'Email', 'City', 'Source URL', 'Date'];
-  const csvRows = [headers.join(',')];
-
-  currentLeads.forEach(l => {
-    const row = [
-      l.id,
-      escapeCsv(l.business_name),
-      escapeCsv(l.contact_person),
-      escapeCsv(l.designation),
-      escapeCsv(l.industry),
-      escapeCsv(l.phone),
-      escapeCsv(l.email),
-      escapeCsv(l.city),
-      escapeCsv(l.source_url),
-      escapeCsv(l.created_at)
-    ];
-    csvRows.push(row.join(','));
-  });
-
-  const blob = new Blob([csvRows.join('\r\n')], { type: 'text/csv;charset=utf-8;' });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = `sunset_group_qualified_leads_${new Date().toISOString().slice(0, 10)}.csv`;
-  document.body.appendChild(a);
-  a.click();
-  document.body.removeChild(a);
-  URL.revokeObjectURL(url);
+  const queryParam = currentSearch ? `?search=${encodeURIComponent(currentSearch)}` : '';
+  window.location.href = `/api/export/csv${queryParam}`;
 });
 
 // Helpers

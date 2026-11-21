@@ -1,5 +1,7 @@
 import re
+import os
 import time
+import random
 import logging
 from datetime import datetime
 from typing import Optional, Dict, Any, Tuple
@@ -10,8 +12,36 @@ from scrapling.parser import Adaptor
 
 import config
 from validators.url import validate_safe_url
+from validators.domain import get_canonical_domain
+from services.circuit_breaker import circuit_breaker
+from tools import domain_limiter
 
 logger = logging.getLogger("scraper")
+
+_HTTP_CLIENT: Optional[httpx.Client] = None
+
+def get_http_client() -> httpx.Client:
+    """Provides a thread-safe, connection-pooled HTTPX client with proxy and modern browser headers."""
+    global _HTTP_CLIENT
+    if _HTTP_CLIENT is None:
+        proxy = getattr(config, "PROXY_URL", "") or os.getenv("HTTP_PROXY") or os.getenv("HTTPS_PROXY")
+        headers = {
+            "User-Agent": config.DEFAULT_USER_AGENT,
+            "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
+            "Accept-Language": "en-US,en;q=0.9",
+            "Sec-Ch-Ua": '"Chromium";v="124", "Google Chrome";v="124"',
+            "Sec-Ch-Ua-Mobile": "?0",
+            "Sec-Ch-Ua-Platform": '"Windows"',
+            "Upgrade-Insecure-Requests": "1"
+        }
+        _HTTP_CLIENT = httpx.Client(
+            timeout=config.HTTP_TIMEOUT_SECONDS,
+            headers=headers,
+            follow_redirects=True,
+            proxy=proxy if proxy else None,
+            limits=httpx.Limits(max_keepalive_connections=20, max_connections=50)
+        )
+    return _HTTP_CLIENT
 
 SPA_ROOT_INDICATORS = [
     r'<div\s+id=[\'"](?:root|app|__next|__nuxt|main-content|react-root)[\'"]\s*>\s*</div>',
@@ -108,7 +138,7 @@ def extract_response_html(page: Any) -> str:
 def fetch_http_mode(url: str, timeout: float = 10.0) -> Tuple[Optional[str], int, Optional[str]]:
     """
     Mode A: Fast HTTP fetch using Scrapling's Fetcher (Chrome TLS impersonation)
-    with httpx fallback.
+    with connection-pooled httpx fallback.
     """
     # 1. Try Scrapling Fetcher with Chrome impersonation
     try:
@@ -117,18 +147,13 @@ def fetch_http_mode(url: str, timeout: float = 10.0) -> Tuple[Optional[str], int
         status = getattr(page, 'status', 200) or 200
         return html, status, None
     except Exception as e:
-        logger.debug(f"Fetcher.get failed for {url}: {e}, falling back to httpx")
+        logger.debug(f"Fetcher.get failed for {url}: {e}, falling back to pooled httpx client")
 
-    # 2. Fallback to standard httpx client
+    # 2. Fallback to pooled connection client
     try:
-        headers = {
-            "User-Agent": config.DEFAULT_USER_AGENT,
-            "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-            "Accept-Language": "en-US,en;q=0.9",
-        }
-        with httpx.Client(timeout=timeout, headers=headers, follow_redirects=True) as client:
-            resp = client.get(url)
-            return resp.text, resp.status_code, None
+        client = get_http_client()
+        resp = client.get(url, timeout=timeout)
+        return resp.text, resp.status_code, None
     except Exception as e:
         return None, 0, str(e)
 
@@ -208,10 +233,28 @@ def adaptive_scrape(
             error_message=f"SSRF Protection: {ssrf_err}"
         )
 
+    # Step 1b: Circuit Breaker Validation
+    if not circuit_breaker.can_request(clean_url):
+        domain = get_canonical_domain(clean_url)
+        return ScrapeResult(
+            html="",
+            status_code=503,
+            scraping_mode="http",
+            render_fallback_used=False,
+            source_url=clean_url,
+            scraped_at=now_iso,
+            extraction_status="blocked",
+            error_message=f"Circuit Breaker is OPEN for '{domain}' due to repeated blocks/failures"
+        )
+
+    # Step 1c: Polite Per-Domain Rate Limiting
+    domain_limiter.wait_for_domain(clean_url)
+
     # If force_browser or mode == 'dynamic' requested explicitly
     if force_browser or mode == "dynamic":
         html, status, err = fetch_playwright_mode(clean_url, timeout=config.PLAYWRIGHT_TIMEOUT_MS)
         if html:
+            circuit_breaker.record_success(clean_url)
             adaptor = Adaptor(html)
             return ScrapeResult(
                 html=html,
@@ -223,6 +266,7 @@ def adaptive_scrape(
                 extraction_status="success",
                 page_adaptor=adaptor
             )
+        circuit_breaker.record_failure(clean_url, f"Playwright failure: {err}")
         return ScrapeResult(
             html="",
             status_code=status or 500,
@@ -234,7 +278,7 @@ def adaptive_scrape(
             error_message=err
         )
 
-    # Step 2: Mode A (HTTP) with retry logic
+    # Step 2: Mode A (HTTP) with exponential backoff & jitter
     last_err = None
     http_html = None
     http_status = 0
@@ -243,11 +287,13 @@ def adaptive_scrape(
         http_html, http_status, last_err = fetch_http_mode(clean_url, timeout=config.HTTP_TIMEOUT_SECONDS)
         if http_html:
             break
-        time.sleep(attempt * 0.5)
+        backoff_sleep = (0.5 * (2 ** (attempt - 1))) + random.uniform(0.1, 0.3)
+        time.sleep(backoff_sleep)
 
     # If mode is strictly 'http', return result without upgrading to Playwright
     if mode == "http":
         if http_html:
+            circuit_breaker.record_success(clean_url)
             adaptor = Adaptor(http_html)
             return ScrapeResult(
                 html=http_html,
@@ -259,6 +305,7 @@ def adaptive_scrape(
                 extraction_status="success",
                 page_adaptor=adaptor
             )
+        circuit_breaker.record_failure(clean_url, f"HTTP failure: {last_err}")
         return ScrapeResult(
             html="",
             status_code=http_status or 500,
@@ -280,6 +327,7 @@ def adaptive_scrape(
 
         # Step 4: If server-rendered content is complete, return HTTP result immediately!
         if not is_challenge and not is_spa:
+            circuit_breaker.record_success(clean_url)
             return ScrapeResult(
                 html=http_html,
                 status_code=http_status,
@@ -296,6 +344,7 @@ def adaptive_scrape(
     # Step 5: Fallback to Mode B (Playwright Dynamic Scraping)
     pw_html, pw_status, pw_err = fetch_playwright_mode(clean_url, timeout=config.PLAYWRIGHT_TIMEOUT_MS)
     if pw_html:
+        circuit_breaker.record_success(clean_url)
         pw_adaptor = Adaptor(pw_html)
         return ScrapeResult(
             html=pw_html,
@@ -307,6 +356,9 @@ def adaptive_scrape(
             extraction_status="success",
             page_adaptor=pw_adaptor
         )
+
+    # Record failure if both failed
+    circuit_breaker.record_failure(clean_url, f"Scrape failed (HTTP: {last_err}, PW: {pw_err})")
 
     # If both modes failed or returned empty
     if http_html:

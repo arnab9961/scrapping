@@ -1,6 +1,6 @@
 import json
 import logging
-from typing import Dict, Any, Tuple
+from typing import Dict, Any, Tuple, Optional
 from openai import OpenAI
 import config
 from validators.phone import normalize_bd_phone
@@ -43,24 +43,34 @@ def rule_based_pre_validation(lead: Dict[str, Any]) -> Tuple[bool, str, list]:
     if not has_phone and not has_email:
         issues.append("Neither phone nor email is available")
 
-    # Validate Bangladesh mobile phone format if phone is provided
+    # Validate phone format if phone is provided
     if has_phone:
         is_val, norm_phone, err = normalize_bd_phone(phone)
         if is_val and norm_phone:
             lead["phone"] = norm_phone
         else:
-            issues.append(f"Invalid Bangladesh mobile phone: {err}")
+            from validators.phone import normalize_phone
+            is_val_g, norm_g, err_g, p_type = normalize_phone(phone, allow_landline=getattr(config, "ALLOW_LANDLINE_PHONES", True))
+            if is_val_g and norm_g:
+                lead["phone"] = norm_g
+                lead["phone_type"] = p_type
+            else:
+                issues.append(f"Invalid phone number: {err}")
 
     if issues:
         return False, "; ".join(issues), issues
 
     return True, "Passed rule-based checks", []
 
-def validate_lead_with_ai(lead: Dict[str, Any], target_industry: str = "Hospitality & Tourism") -> Dict[str, Any]:
+def validate_lead_with_ai(lead: Dict[str, Any], target_industry: str = "Hospitality & Tourism", client_name: Optional[str] = None) -> Dict[str, Any]:
     """
     Validates a scraped lead using the Groq AI model with strict JSON output.
     Returns the parsed and verified validation result dictionary.
     """
+    active_client = client_name or getattr(config, "CLIENT_NAME", "Sunset Group")
+    active_entity = getattr(config, "CLIENT_ENTITY", "Sunset Kuakata Hotel & Resort")
+    effective_industry = target_industry or getattr(config, "TARGET_INDUSTRY", "Corporate & Hospitality")
+
     # 1. Rule-based pre-validation
     passed_rules, rule_reason, rule_issues = rule_based_pre_validation(lead)
     if not passed_rules:
@@ -69,7 +79,7 @@ def validate_lead_with_ai(lead: Dict[str, Any], target_industry: str = "Hospital
             "confidence_score": 0,
             "business_name": lead.get("business_name") or lead.get("organization") or "N/A",
             "contact_person": lead.get("contact_person") or lead.get("name") or "N/A",
-            "industry": target_industry,
+            "industry": effective_industry,
             "reason": f"Rule-based rejection: {rule_reason}",
             "issues": rule_issues,
             "recommended_action": "reject",
@@ -91,7 +101,7 @@ def validate_lead_with_ai(lead: Dict[str, Any], target_industry: str = "Hospital
             "confidence_score": 0,
             "business_name": lead.get("business_name") or lead.get("organization") or "N/A",
             "contact_person": lead.get("contact_person") or lead.get("name") or "N/A",
-            "industry": target_industry,
+            "industry": effective_industry,
             "reason": err_msg,
             "issues": ["GROQ_CLOUD_API_KEY missing"],
             "recommended_action": "reject",
@@ -115,22 +125,21 @@ def validate_lead_with_ai(lead: Dict[str, Any], target_industry: str = "Hospital
     source = lead.get("source_url") or "N/A"
 
     system_prompt = (
-        "You are an expert AI Lead Validation Officer for Sunset Group (Sunset Kuakata Hotel & Resort).\n"
-        "Your task is to strictly evaluate whether a scraped lead is a legitimate, relevant, and usable business prospect.\n\n"
-        "BUSINESS CONTEXT & TARGET MARKET:\n"
-        "- Sunset Group (Sunset Kuakata Hotel & Resort) targets corporate B2B clients, conferences, executive retreats,\n"
-        "  seminars, corporate tours, and commercial partnerships across ALL sectors:\n"
-        "  Banking & Finance, Corporate Enterprises, IT, Telecom, Garments, Travel, Associations, Government, and Commercial businesses.\n"
-        "- Any legitimate business entity, company, financial institution, director, manager, or executive with verifiable\n"
-        "  contact info (phone, email, or role) is a VALUABLE and RELEVANT corporate lead.\n\n"
-        "BANGLADESH MOBILE PHONE RULES:\n"
-        "- Only valid Bangladesh mobile phone numbers in international format (+8801XXXXXXXXX) are acceptable.\n"
-        "- Valid mobile operator prefixes are 013, 014, 015, 016, 017, 018, 019.\n"
-        "- Any number starting with 02 or +8802 (landlines), IP addresses (e.g. 192.168.1.1), short codes, or incomplete numbers must be REJECTED.\n\n"
+        f"You are an expert AI Lead Validation Officer for {active_client} ({active_entity}).\n"
+        f"Your task is to strictly evaluate whether a scraped lead is a legitimate, relevant, and usable business prospect in {effective_industry}.\n\n"
+        f"BUSINESS CONTEXT & TARGET MARKET:\n"
+        f"- {active_client} ({active_entity}) targets corporate B2B clients, decision makers, executive retreats,\n"
+        f"  seminars, corporate tours, and commercial partnerships across key sectors:\n"
+        f"  Banking & Finance, Corporate Enterprises, IT, Telecom, Garments, Travel, Associations, Government, and Commercial businesses.\n"
+        f"- Any legitimate business entity, company, financial institution, director, manager, or executive with verifiable\n"
+        f"  contact info (phone, email, or role) is a VALUABLE and RELEVANT corporate lead.\n\n"
+        f"PHONE & CONTACT RULES:\n"
+        f"- Valid international phone numbers (E.164) or Bangladesh numbers (+8801...) are acceptable.\n"
+        f"- IP addresses, dummy repeating digits, short codes, or incomplete numbers must be REJECTED.\n\n"
         "Evaluation criteria:\n"
         "1. Is this a real business, organization, or corporate decision-maker?\n"
         "2. Does it represent a legitimate business, association, or commercial prospect?\n"
-        "3. Is the collected contact information credible and usable (valid +880 phone or valid email)?\n"
+        "3. Is the collected contact information credible and usable (valid phone or valid email)?\n"
         "4. Is the website genuine or plausible?\n"
         "5. Is the information complete enough to be actionable for outreach?\n"
         "6. Is this a duplicate, spam entry, or irrelevant placeholder result?\n\n"

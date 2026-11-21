@@ -222,22 +222,52 @@ uvicorn app:app --host 0.0.0.0 --port 8001 --reload
 | `POST` | `/api/search` | Synchronous REST search endpoint |
 | `GET` | `/api/scrape-url/stream` | Real-time SSE stream for direct webpage URL scraping |
 | `POST` | `/api/scrape-url` | Synchronous REST direct webpage scraping endpoint |
+| `GET` | `/api/export/csv` | Streams leads as CSV with all contact channels |
+| `GET` | `/api/export/json` | Streams qualified leads as JSON array |
+| `GET` | `/api/export/jsonl` | Streams qualified leads as JSON Lines (ndjson) |
+| `GET` | `/api/export/excel` | Streams leads as formatted styled `.xlsx` workbook |
+| `GET` | `/api/jobs/{job_id}/checkpoint` | Retrieves saved job state checkpoint for crash recovery |
+
+---
+
+## ⚙️ Configuration (`scraper_config.yaml`)
+
+Configuration can be decoupled and customized without modifying application code via `scraper_config.yaml` or `.env` overrides:
+
+```yaml
+scraping:
+  max_workers: 6
+  domain_rate_limit: 1.5
+  circuit_breaker_threshold: 4
+  circuit_breaker_recovery_sec: 60.0
+  allow_landline_phones: true
+  min_completeness_score: 50
+
+lead_defaults:
+  client_name: "Sunset Group"
+  client_entity: "Sunset Kuakata Hotel & Resort"
+  target_industry: "Hospitality & Tourism"
+```
 
 ---
 
 ## 🧪 Running Automated Tests
 
-Run the complete test suite:
+Run the complete application test suite:
 ```powershell
-python -m pytest tests/test_sunset_system.py tests/test_scraper_modes.py -v
+python -m pytest tests/test_sunset_system.py tests/test_validators_new.py tests/test_extractor_enrichment.py tests/test_scorer_and_fuzzy_dedup.py tests/test_circuit_breaker.py tests/test_exporters_and_checkpoints.py tests/test_offline_pipeline.py -v
 ```
 
-All 16 test cases verify:
-- Bangladesh phone normalization (`017...` -> `+88017...`) and rejection of invalid prefixes/lengths.
-- SSRF prevention blocking localhost, private subnets, and cloud metadata.
-- JSON-LD, meta tag, and semantic link extraction.
-- Duplicate detection across phone, email, domain, and similarity.
-- Groq AI validation pipeline with strict JSON schema verification.
-- Database persistence, rejection logs, and statistics queries.
-- Dual-mode scraping (Mode A HTTP and Mode B Playwright SPA detection).
-- FastAPI endpoints and static logo asset delivery.
+All 32 test cases verify:
+- Bangladesh phone normalization (`017...` -> `+88017...`) and global E.164 parsing.
+- RFC email validation, MX domain checking & disposable filtering.
+- Canonical domain extraction and URL tracking parameter stripping.
+- Social links extraction (LinkedIn, Facebook, Twitter, Instagram, YouTube).
+- Multi-channel contact capture (secondary phones and secondary emails).
+- Lead completeness & data confidence scoring engine (0–100 scale).
+- Fuzzy duplicate detection via token-sort similarity & canonical domain matching.
+- Per-domain circuit breaker tripping and cooldown recovery.
+- Thread-safe domain rate limiter preventing cross-domain blocking.
+- Job checkpointing and resume persistence lifecycle.
+- Multi-format streaming export endpoints (CSV, JSON, JSONL, Excel).
+- End-to-end offline pipeline processing on real HTML fixtures.

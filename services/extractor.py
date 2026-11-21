@@ -3,7 +3,14 @@ import json
 import urllib.parse
 from typing import List, Dict, Any, Optional, Tuple
 from bs4 import BeautifulSoup
-from validators.phone import normalize_bd_phone, extract_and_normalize_bd_phones
+from validators.phone import (
+    normalize_bd_phone,
+    extract_and_normalize_bd_phones,
+    normalize_phone,
+    extract_and_normalize_phones
+)
+from validators.email import validate_email_address, extract_and_normalize_emails
+from validators.domain import normalize_url, get_canonical_domain
 
 ORG_KEYWORDS = {
     # Business entities & suffixes
@@ -300,7 +307,40 @@ def extract_meta_tags(soup: BeautifulSoup) -> Dict[str, str]:
             meta[prop.lower()] = clean_text(content)
     return meta
 
-def extract_semantic_links(soup: BeautifulSoup) -> Tuple[List[str], List[str]]:
+def extract_social_links(soup: BeautifulSoup) -> Dict[str, str]:
+    """
+    Extracts social media profile links (LinkedIn, Facebook, Twitter/X, Instagram, YouTube).
+    """
+    socials: Dict[str, str] = {
+        "linkedin_url": "",
+        "facebook_url": "",
+        "twitter_url": "",
+        "instagram_url": "",
+        "youtube_url": ""
+    }
+    for a in soup.find_all('a', href=True):
+        href = a['href'].strip()
+        if not href or href.startswith(('javascript:', '#', 'mailto:', 'tel:')):
+            continue
+        lower_href = href.lower()
+        if 'linkedin.com/' in lower_href and not socials['linkedin_url']:
+            if any(p in lower_href for p in ['/company/', '/in/', '/school/']) and not any(s in lower_href for s in ['/share', '/intent']):
+                socials['linkedin_url'] = href.split('?')[0].rstrip('/')
+        elif 'facebook.com/' in lower_href and not socials['facebook_url']:
+            if not any(s in lower_href for s in ['/sharer', '/share', '/dialog', 'plugins', 'facebook.com/tr']):
+                socials['facebook_url'] = href.split('?')[0].rstrip('/')
+        elif ('twitter.com/' in lower_href or 'x.com/' in lower_href) and not socials['twitter_url']:
+            if not any(s in lower_href for s in ['/intent', '/share', '/status/']):
+                socials['twitter_url'] = href.split('?')[0].rstrip('/')
+        elif 'instagram.com/' in lower_href and not socials['instagram_url']:
+            if not any(s in lower_href for s in ['/p/', '/explore/', '/reel/']):
+                socials['instagram_url'] = href.split('?')[0].rstrip('/')
+        elif 'youtube.com/' in lower_href and not socials['youtube_url']:
+            if any(p in lower_href for p in ['/channel/', '/c/', '/user/', '/@']):
+                socials['youtube_url'] = href.split('?')[0].rstrip('/')
+    return socials
+
+def extract_semantic_links(soup: BeautifulSoup, default_country: str = "BD") -> Tuple[List[str], List[str]]:
     """Extracts tel: and mailto: links directly from DOM."""
     phones = []
     emails = []
@@ -315,7 +355,10 @@ def extract_semantic_links(soup: BeautifulSoup) -> Tuple[List[str], List[str]]:
                 raw_chunk = raw_chunk.strip()
                 if not raw_chunk:
                     continue
+                # Try BD first, then fallback to global phone normalization
                 is_val, norm_p, _ = normalize_bd_phone(raw_chunk)
+                if not is_val:
+                    is_val, norm_p, _, _ = normalize_phone(raw_chunk, default_country=default_country)
                 if is_val and norm_p:
                     if norm_p not in seen_phones:
                         seen_phones.add(norm_p)
@@ -324,9 +367,10 @@ def extract_semantic_links(soup: BeautifulSoup) -> Tuple[List[str], List[str]]:
             raw_email = urllib.parse.unquote(href[7:].split('?')[0]).strip().lower()
             for em_chunk in re.split(r'[,;/]', raw_email):
                 clean_em = re.sub(r'^(?:email|e-mail|mail)\:?', '', em_chunk.strip(), flags=re.IGNORECASE).strip()
-                if '@' in clean_em and clean_em not in seen_emails:
-                    seen_emails.add(clean_em)
-                    emails.append(clean_em)
+                is_val, norm_em, _, _ = validate_email_address(clean_em)
+                if is_val and norm_em and norm_em not in seen_emails:
+                    seen_emails.add(norm_em)
+                    emails.append(norm_em)
 
     return phones, emails
 
@@ -656,7 +700,18 @@ def extract_leads_from_tables(
             row_text = clean_text(row.get_text(separator=' '))
             sub_soup = BeautifulSoup(str(row), 'html.parser')
             sub_phones, sub_emails = extract_semantic_links(sub_soup)
-            row_phones = list(dict.fromkeys(extract_and_normalize_bd_phones(row_text) + sub_phones))
+
+            norm_phones_list = [p['phone'] for p in extract_and_normalize_phones(row_text)]
+            bd_phones_list = extract_and_normalize_bd_phones(row_text)
+            
+            col_cell_phones = []
+            if col_phone != -1 and col_phone < len(cells):
+                cell_text = clean_text(cells[col_phone].get_text())
+                val_c, norm_c, _, _ = normalize_phone(cell_text, allow_landline=True)
+                if val_c and norm_c:
+                    col_cell_phones.append(norm_c)
+
+            row_phones = list(dict.fromkeys(col_cell_phones + bd_phones_list + norm_phones_list + sub_phones))
             raw_emails = re.findall(r'\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b', row_text)
             row_emails = list(dict.fromkeys([e.lower() for e in raw_emails + sub_emails]))
 
@@ -807,7 +862,9 @@ def extract_leads_from_cards(
             el_text = clean_text(el.get_text(separator=' '))
             el_html = str(el)
 
-            card_phones = extract_and_normalize_bd_phones(el_text)
+            card_bd_phones = extract_and_normalize_bd_phones(el_text)
+            card_intl_phones = [p['phone'] for p in extract_and_normalize_phones(el_text)]
+            card_phones = list(dict.fromkeys(card_bd_phones + card_intl_phones))
             card_emails = re.findall(r'\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b', el_text)
 
             # Check protected emails (e.g. Bangladesh Bank div/td with onselectstart)
@@ -1012,6 +1069,8 @@ def extract_leads_from_html(
 
     # Derive site organization/brand name
     meta = extract_meta_tags(soup)
+    socials = extract_social_links(soup)
+    canonical_dom = get_canonical_domain(page_url)
     site_title = meta.get('og:site_name') or meta.get('og:title') or ''
     if not site_title and soup.title:
         site_title = clean_text(soup.title.string)
@@ -1059,7 +1118,9 @@ def extract_leads_from_html(
     # 6. Fallback to general page text if no structured leads discovered
     if not leads:
         all_text = clean_text(soup.get_text())
-        text_phones = extract_and_normalize_bd_phones(all_text)
+        text_bd_phones = extract_and_normalize_bd_phones(all_text)
+        text_intl_phones = [p['phone'] for p in extract_and_normalize_phones(all_text)]
+        text_phones = list(dict.fromkeys(text_bd_phones + text_intl_phones))
         text_emails = re.findall(r'\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b', all_text)
 
         combined_phones = list(dict.fromkeys(semantic_phones + text_phones))
@@ -1117,7 +1178,17 @@ def extract_leads_from_html(
                 'extraction_technique': 'page_text'
             })
 
-    # Early deduplication by phone/email across leads on the same page
+    # Collect all page-level unique phones and emails
+    all_page_phones = list(dict.fromkeys(
+        [l.get('phone') for l in leads if l.get('phone') and l.get('phone') != 'N/A'] +
+        semantic_phones
+    ))
+    all_page_emails = list(dict.fromkeys(
+        [l.get('email') for l in leads if l.get('email') and l.get('email') != 'N/A'] +
+        semantic_emails
+    ))
+
+    # Early deduplication and enrichment across leads on the same page
     unique_leads = []
     seen = set()
     for l in leads:
@@ -1127,6 +1198,29 @@ def extract_leads_from_html(
         if sig != "N/A|N/A" and sig in seen:
             continue
         seen.add(sig)
+
+        # Enrich with canonical domain and socials
+        l['canonical_domain'] = l.get('canonical_domain') or canonical_dom
+        l['linkedin_url'] = l.get('linkedin_url') or socials.get('linkedin_url', '')
+        l['facebook_url'] = l.get('facebook_url') or socials.get('facebook_url', '')
+        l['twitter_url'] = l.get('twitter_url') or socials.get('twitter_url', '')
+        l['instagram_url'] = l.get('instagram_url') or socials.get('instagram_url', '')
+        l['youtube_url'] = l.get('youtube_url') or socials.get('youtube_url', '')
+
+        # Classify phone type
+        p_val, _, _, p_type = normalize_phone(p, allow_landline=True)
+        l['phone_type'] = p_type if p_val else "UNKNOWN"
+
+        # Classify email type
+        e_val, _, _, e_type = validate_email_address(e)
+        l['email_type'] = e_type if e_val else "UNKNOWN"
+
+        # Attach secondary contact channels found on the same page
+        sec_phones = [ph for ph in all_page_phones if ph != p]
+        sec_emails = [em for em in all_page_emails if em != e]
+        l['secondary_phones'] = sec_phones
+        l['secondary_emails'] = sec_emails
+
         unique_leads.append(l)
 
     return unique_leads

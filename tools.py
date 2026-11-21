@@ -3,16 +3,45 @@ import time
 import base64
 import urllib.parse
 import urllib.robotparser
-from typing import List, Dict, Any, Tuple
+from typing import List, Dict, Any, Tuple, Optional
 import httpx
 from scrapling.fetchers import Fetcher
 from scrapling.parser import Adaptor
 
 import config
 from validators.url import validate_safe_url
+from validators.domain import get_canonical_domain
+import threading
 
-_ROBOTS_CACHE: Dict[str, urllib.robotparser.RobotFileParser] = {}
-_LAST_REQUEST_TIME: float = 0.0
+class DomainRateLimiter:
+    """
+    Per-domain thread-safe rate limiter.
+    Ensures polite intervals between outbound requests to the same host
+    without creating a global bottleneck across unrelated domains.
+    """
+    def __init__(self, default_delay: float = 1.0):
+        self.default_delay = default_delay
+        self.last_request_times: Dict[str, float] = {}
+        self.lock = threading.Lock()
+
+    def wait_for_domain(self, domain_or_url: str = "", custom_delay: Optional[float] = None):
+        domain = get_canonical_domain(domain_or_url) if domain_or_url else "_global_"
+        delay = custom_delay if custom_delay is not None else self.default_delay
+
+        with self.lock:
+            last_time = self.last_request_times.get(domain, 0.0)
+            now = time.time()
+            elapsed = now - last_time
+            if elapsed < delay:
+                time.sleep(delay - elapsed)
+            self.last_request_times[domain] = time.time()
+
+domain_limiter = DomainRateLimiter(default_delay=getattr(config, "RATE_LIMIT_DELAY", 1.0))
+_ROBOTS_CACHE: Dict[str, Tuple[urllib.robotparser.RobotFileParser, float]] = {}
+
+def respect_rate_limit(domain_or_url: Optional[str] = None):
+    """Polite rate limiting delay respecting per-domain intervals."""
+    domain_limiter.wait_for_domain(domain_or_url or "")
 
 SKIP_DOMAINS = {
     'whatsapp.com', 'facebook.com', 'fb.com', 'm.me', 'messenger.com',
@@ -44,16 +73,8 @@ def is_skippable_url(url: str) -> bool:
     except Exception:
         return False
 
-def respect_rate_limit():
-    """Polite rate limiting delay between outbound requests."""
-    global _LAST_REQUEST_TIME
-    elapsed = time.time() - _LAST_REQUEST_TIME
-    if elapsed < config.RATE_LIMIT_DELAY:
-        time.sleep(config.RATE_LIMIT_DELAY - elapsed)
-    _LAST_REQUEST_TIME = time.time()
-
 def check_robots_txt(url: str, user_agent: str = config.DEFAULT_USER_AGENT) -> bool:
-    """Verifies if scraping this URL is permitted by the domain's robots.txt."""
+    """Verifies if scraping this URL is permitted by the domain's robots.txt with 24h caching."""
     try:
         is_safe, clean_url, _ = validate_safe_url(url)
         if not is_safe:
@@ -63,24 +84,28 @@ def check_robots_txt(url: str, user_agent: str = config.DEFAULT_USER_AGENT) -> b
         if not parsed.netloc:
             return True
         domain_root = f"{parsed.scheme}://{parsed.netloc}"
+        now = time.time()
 
         if domain_root in _ROBOTS_CACHE:
-            rp = _ROBOTS_CACHE[domain_root]
-        else:
-            robots_url = f"{domain_root}/robots.txt"
-            rp = urllib.robotparser.RobotFileParser()
-            rp.set_url(robots_url)
-            try:
-                with httpx.Client(timeout=4.0, headers={"User-Agent": user_agent}) as client:
-                    resp = client.get(robots_url)
-                    if resp.status_code == 200:
-                        rp.parse(resp.text.splitlines())
-                    else:
-                        rp.allow_all = True
-            except Exception:
-                rp.allow_all = True
-            _ROBOTS_CACHE[domain_root] = rp
+            rp, cached_at = _ROBOTS_CACHE[domain_root]
+            if now - cached_at < 86400:  # 24 hours TTL
+                return rp.can_fetch(user_agent, clean_url)
 
+        robots_url = f"{domain_root}/robots.txt"
+        rp = urllib.robotparser.RobotFileParser()
+        rp.set_url(robots_url)
+        try:
+            domain_limiter.wait_for_domain(domain_root, custom_delay=0.5)
+            with httpx.Client(timeout=4.0, headers={"User-Agent": user_agent}) as client:
+                resp = client.get(robots_url)
+                if resp.status_code == 200:
+                    rp.parse(resp.text.splitlines())
+                else:
+                    rp.allow_all = True
+        except Exception:
+            rp.allow_all = True
+
+        _ROBOTS_CACHE[domain_root] = (rp, now)
         return rp.can_fetch(user_agent, clean_url)
     except Exception:
         return True

@@ -459,6 +459,12 @@ def test_fastapi_routes():
     assert res_ssrf.status_code == 400
     assert "Invalid URL" in res_ssrf.json()["detail"]
 
+    # CSV Full Dataset Export API
+    res_export = client.get("/api/export/csv")
+    assert res_export.status_code == 200
+    assert "text/csv" in res_export.headers["content-type"]
+    assert "Business Name" in res_export.text
+
 # 8. Brave Search Provider Primary Lead Discovery Test
 def test_brave_search_provider_discovery():
     from tools import web_search, search_via_brave

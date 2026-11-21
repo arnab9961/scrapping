@@ -12,8 +12,11 @@ import config
 from agent import stream_leads_generator, stream_url_leads_generator, fallback_heuristic_search
 from validators.phone import normalize_bd_phone
 from validators.url import validate_safe_url
-from services.database import get_dashboard_stats, get_leads, get_rejected_leads
+from datetime import datetime
+from services.database import get_dashboard_stats, get_leads, get_rejected_leads, stream_leads_csv
 from services.job_manager import JobManager
+from services.exporter import stream_csv_export, stream_json_export, generate_excel_export
+from services.checkpoint import get_checkpoint, save_checkpoint
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(name)s: %(message)s")
 logger = logging.getLogger("app")
@@ -132,6 +135,85 @@ def list_leads(
         "total_pages": (total + page_size - 1) // page_size if total > 0 else 1,
         "leads": leads
     }
+
+# Multi-Format Lead Export APIs (CSV, JSON, JSONL, Excel)
+@app.get("/api/export/csv")
+def export_leads_csv(
+    search: str = Query("", description="Search by name, business, phone, email, or city"),
+    industry: str = Query("", description="Filter by industry/category")
+):
+    """Streams full CSV export of qualified leads directly from the database."""
+    timestamp = datetime.utcnow().strftime('%Y%m%d_%H%M%S')
+    filename = f"leads_export_{timestamp}.csv"
+    return StreamingResponse(
+        stream_csv_export(search=search, industry=industry),
+        media_type="text/csv; charset=utf-8",
+        headers={
+            "Content-Disposition": f"attachment; filename=\"{filename}\"",
+            "Cache-Control": "no-cache, no-store, must-revalidate"
+        }
+    )
+
+@app.get("/api/export/json")
+def export_leads_json(
+    search: str = Query("", description="Search by name, business, phone, email, or city"),
+    industry: str = Query("", description="Filter by industry/category")
+):
+    """Streams full JSON array export of qualified leads."""
+    timestamp = datetime.utcnow().strftime('%Y%m%d_%H%M%S')
+    filename = f"leads_export_{timestamp}.json"
+    return StreamingResponse(
+        stream_json_export(search=search, industry=industry, json_lines=False),
+        media_type="application/json; charset=utf-8",
+        headers={
+            "Content-Disposition": f"attachment; filename=\"{filename}\"",
+            "Cache-Control": "no-cache, no-store, must-revalidate"
+        }
+    )
+
+@app.get("/api/export/jsonl")
+def export_leads_jsonl(
+    search: str = Query("", description="Search by name, business, phone, email, or city"),
+    industry: str = Query("", description="Filter by industry/category")
+):
+    """Streams JSON Lines (ndjson) export of qualified leads."""
+    timestamp = datetime.utcnow().strftime('%Y%m%d_%H%M%S')
+    filename = f"leads_export_{timestamp}.jsonl"
+    return StreamingResponse(
+        stream_json_export(search=search, industry=industry, json_lines=True),
+        media_type="application/x-ndjson; charset=utf-8",
+        headers={
+            "Content-Disposition": f"attachment; filename=\"{filename}\"",
+            "Cache-Control": "no-cache, no-store, must-revalidate"
+        }
+    )
+
+@app.get("/api/export/excel")
+def export_leads_excel(
+    search: str = Query("", description="Search by name, business, phone, email, or city"),
+    industry: str = Query("", description="Filter by industry/category")
+):
+    """Generates and returns formatted Excel (.xlsx) spreadsheet with styled headers."""
+    from fastapi.responses import Response
+    timestamp = datetime.utcnow().strftime('%Y%m%d_%H%M%S')
+    filename = f"leads_export_{timestamp}.xlsx"
+    excel_bytes = generate_excel_export(search=search, industry=industry)
+    return Response(
+        content=excel_bytes,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={
+            "Content-Disposition": f"attachment; filename=\"{filename}\"",
+            "Cache-Control": "no-cache, no-store, must-revalidate"
+        }
+    )
+
+@app.get("/api/jobs/{job_id}/checkpoint")
+def get_job_checkpoint_state(job_id: str):
+    """Returns stored checkpoint state for a scraping job."""
+    cp = get_checkpoint(job_id)
+    if not cp:
+        raise HTTPException(status_code=404, detail=f"No checkpoint found for job '{job_id}'.")
+    return {"status": "success", "job_id": job_id, "checkpoint": cp}
 
 # Rejection Audit Log API
 @app.get("/api/rejected-leads")
